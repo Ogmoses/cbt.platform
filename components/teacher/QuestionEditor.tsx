@@ -10,6 +10,13 @@
 
 import { useRef, useState } from "react";
 import { Plus, Trash2, ImagePlus, X, Loader2 } from "lucide-react";
+import MathText from "@/components/common/MathText";
+import { splitMathSegments } from "@/lib/mathDetect";
+
+/** Whether any part of the text actually contains a detected formula — used to decide whether a live preview is worth showing at all. */
+function hasMath(text: string): boolean {
+  return splitMathSegments(text).some((s) => s.type === "math");
+}
 import {
   QUESTION_TYPE_LABEL,
   type BankQuestion,
@@ -224,6 +231,17 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
               placeholder="Type the question text"
               className="w-full resize-none rounded-lg border border-black/10 dark:border-white/15 px-3 py-2.5 text-[13px] outline-none focus:border-crimson-500"
             />
+            {/* Live formula preview — any math-looking part of the prompt
+                (x^2, sqrt(16), H_2O, etc.) is detected automatically, no
+                special markup needed. Only shown once there's actually
+                something to preview, so it doesn't clutter plain-text
+                questions. */}
+            {hasMath(prompt) && (
+              <div className="mt-1.5 rounded-md border border-dashed border-black/10 bg-background-muted px-3 py-2 dark:border-white/15 dark:bg-white/5">
+                <p className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-ink/35 dark:text-white/35">Preview</p>
+                <MathText text={prompt} className="text-[13.5px] text-ink dark:text-white" />
+              </div>
+            )}
           </label>
 
           <div>
@@ -253,27 +271,32 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
               <span className="mb-1.5 block text-[12px] font-medium text-ink/60 dark:text-white/60">Options — select the correct one</span>
               <div className="space-y-2">
                 {options.map((opt) => (
-                  <div key={opt.id} className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => markCorrect(opt.id)}
-                      aria-label="Mark correct"
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                        opt.isCorrect ? "border-crimson-600 bg-crimson-600" : "border-black/20"
-                      }`}
-                    >
-                      {opt.isCorrect && <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-[#1A1C20]" />}
-                    </button>
-                    <input
-                      value={opt.text}
-                      onChange={(e) => updateOption(opt.id, { text: e.target.value })}
-                      disabled={type === "true_false"}
-                      className="flex-1 rounded-lg border border-black/10 dark:border-white/15 px-3 py-2 text-[13px] outline-none focus:border-crimson-500 disabled:bg-background-muted dark:bg-white/5 disabled:text-ink/60 dark:text-white/60"
-                    />
-                    {type === "multiple_choice" && options.length > 2 && (
-                      <button onClick={() => removeOption(opt.id)} className="text-ink/30 dark:text-white/30 hover:text-crimson-600">
-                        <Trash2 size={15} />
+                  <div key={opt.id}>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => markCorrect(opt.id)}
+                        aria-label="Mark correct"
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                          opt.isCorrect ? "border-crimson-600 bg-crimson-600" : "border-black/20"
+                        }`}
+                      >
+                        {opt.isCorrect && <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-[#1A1C20]" />}
                       </button>
+                      <input
+                        value={opt.text}
+                        onChange={(e) => updateOption(opt.id, { text: e.target.value })}
+                        disabled={type === "true_false"}
+                        className="flex-1 rounded-lg border border-black/10 dark:border-white/15 px-3 py-2 text-[13px] outline-none focus:border-crimson-500 disabled:bg-background-muted dark:bg-white/5 disabled:text-ink/60 dark:text-white/60"
+                      />
+                      {type === "multiple_choice" && options.length > 2 && (
+                        <button onClick={() => removeOption(opt.id)} className="text-ink/30 dark:text-white/30 hover:text-crimson-600">
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+                    {hasMath(opt.text) && (
+                      <MathText text={opt.text} className="ml-7 mt-1 block text-[12.5px] text-ink/60 dark:text-white/60" />
                     )}
                   </div>
                 ))}
@@ -310,6 +333,12 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
                 rows={3}
                 className="w-full resize-none rounded-lg border border-black/10 dark:border-white/15 px-3 py-2.5 text-[13px] outline-none focus:border-crimson-500"
               />
+              {hasMath(referenceAnswer) && (
+                <div className="mt-1.5 rounded-md border border-dashed border-black/10 bg-background-muted px-3 py-2 dark:border-white/15 dark:bg-white/5">
+                  <p className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-ink/35 dark:text-white/35">Preview</p>
+                  <MathText text={referenceAnswer} className="text-[13.5px] text-ink dark:text-white" />
+                </div>
+              )}
             </label>
           )}
 

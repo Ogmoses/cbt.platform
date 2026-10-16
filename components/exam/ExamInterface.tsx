@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import MathText from "@/components/common/MathText";
 import {
   Clock,
   Flag,
@@ -270,7 +271,7 @@ export default function ExamInterface({ exam, sessionId, studentName, initialAns
               className="rounded-lg bg-white dark:bg-[#1A1C20] p-5 shadow-card sm:p-7"
             >
               <p className="mb-1 text-[11px] font-medium text-ink/40 dark:text-white/40">{question.points} point{question.points === 1 ? "" : "s"}</p>
-              <p className="text-[15px] font-medium leading-relaxed text-ink dark:text-white sm:text-[16px]">{question.prompt}</p>
+              <MathText text={question.prompt} className="block text-[15px] font-medium leading-relaxed text-ink dark:text-white sm:text-[16px]" />
 
               {question.imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -444,7 +445,7 @@ function QuestionInput({
                 checked={selected}
                 onChange={() => onChange(opt.id)}
               />
-              {opt.text}
+              <MathText text={opt.text} />
             </label>
           );
         })}

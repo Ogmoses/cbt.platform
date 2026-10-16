@@ -8,6 +8,7 @@
  */
 
 import { CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import MathText from "@/components/common/MathText";
 
 export interface ReviewQuestion {
   questionId: string;
@@ -70,7 +71,7 @@ export default function ExamReview({
                 </span>
               </div>
 
-              <p className="mb-2.5 text-[13.5px] leading-relaxed text-ink dark:text-white">{q.prompt}</p>
+              <MathText text={q.prompt} className="mb-2.5 block text-[13.5px] leading-relaxed text-ink dark:text-white" />
 
               {(q.type === "multiple_choice" || q.type === "true_false") && q.options ? (
                 <div className="space-y-1.5">
@@ -87,7 +88,7 @@ export default function ExamReview({
                             : "border-black/10 dark:border-white/15 text-ink/60 dark:text-white/60"
                         }`}
                       >
-                        {opt.text}
+                        <MathText text={opt.text} />
                         {opt.isCorrect && <span className="ml-1.5 text-[11px] font-medium text-success">(correct answer)</span>}
                         {isSelected && !opt.isCorrect && <span className="ml-1.5 text-[11px] font-medium text-crimson-600">(your answer)</span>}
                         {isSelected && opt.isCorrect && <span className="ml-1.5 text-[11px] font-medium text-success">(your answer)</span>}
@@ -100,14 +101,14 @@ export default function ExamReview({
                 <div className="space-y-2">
                   <div className="rounded-md bg-crimson-50 dark:bg-crimson-600/15 px-3 py-2 text-[12.5px] text-ink dark:text-on-crimson">
                     <span className="mr-1.5 text-[11px] font-medium uppercase tracking-wide text-crimson-700 dark:text-crimson-500/70">Your answer</span>
-                    <p className="whitespace-pre-wrap">{q.freeTextAnswer?.trim() || "— left blank —"}</p>
+                    <MathText text={q.freeTextAnswer?.trim() || "— left blank —"} className="block whitespace-pre-wrap" />
                   </div>
                   {q.referenceAnswer && (
                     <div className="rounded-md bg-background-muted dark:bg-white/5 px-3 py-2 text-[12.5px] text-ink/75 dark:text-white/75">
                       <span className="mr-1.5 text-[11px] font-medium uppercase tracking-wide text-ink/40 dark:text-white/40">
                         {q.type === "fill_blank" ? "Expected answer" : "Marking guide"}
                       </span>
-                      <p className="whitespace-pre-wrap">{q.referenceAnswer}</p>
+                      <MathText text={q.referenceAnswer} className="block whitespace-pre-wrap" />
                     </div>
                   )}
                 </div>

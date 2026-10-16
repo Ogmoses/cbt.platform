@@ -7,6 +7,7 @@
  */
 
 import { useState } from "react";
+import MathText from "@/components/common/MathText";
 import { X, Loader2, ArrowRight, ChevronRight } from "lucide-react";
 import type { GradingItem } from "./types";
 
@@ -59,7 +60,7 @@ export default function GradingPanel({ item, hasNext, onSave, onSaveAndNext, onC
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div>
             <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-ink/40 dark:text-white/40">Question</p>
-            <p className="text-[13.5px] leading-relaxed text-ink dark:text-white">{item.questionPrompt}</p>
+            <MathText text={item.questionPrompt} className="block text-[13.5px] leading-relaxed text-ink dark:text-white" />
           </div>
 
           {item.referenceAnswer && (

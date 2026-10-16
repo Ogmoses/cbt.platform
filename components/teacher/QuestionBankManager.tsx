@@ -7,6 +7,7 @@
  */
 
 import { useMemo, useState } from "react";
+import MathText from "@/components/common/MathText";
 import { Plus, Pencil, Trash2, Search, ImageIcon, AlertCircle } from "lucide-react";
 import QuestionEditor from "./QuestionEditor";
 import { QUESTION_TYPE_LABEL, type BankQuestion, type ClassOption, type SubjectOption } from "./types";
@@ -142,7 +143,7 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
                   )}
                   {q.imageUrl && <ImageIcon size={12} className="text-ink/30 dark:text-white/30" />}
                 </div>
-                <p className="break-words text-[13.5px] text-ink dark:text-white">{q.prompt}</p>
+                <MathText text={q.prompt} className="block break-words text-[13.5px] text-ink dark:text-white" />
               </div>
               <span className="shrink-0 pt-0.5 text-[12px] font-medium text-ink/40 dark:text-white/40">{q.points} pt{q.points === 1 ? "" : "s"}</span>
               <div className="flex shrink-0 items-center gap-1 pt-0.5">
