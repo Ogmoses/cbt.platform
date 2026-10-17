@@ -159,7 +159,7 @@ export default function BulkImportModal({ role, classOptions, subjectOptions, on
                   <div
                     key={i}
                     className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-[12.5px] ${
-                      row.data ? "bg-background-muted dark:bg-white/5 text-ink/70 dark:text-on-crimson/70" : "bg-crimson-50 dark:bg-crimson-600/15 text-crimson-700 dark:text-crimson-500"
+                      row.data ? "bg-background-muted dark:bg-white/5 text-ink/70 dark:text-white/70" : "bg-crimson-50 dark:bg-crimson-600/15 text-crimson-700 dark:text-crimson-500"
                     }`}
                   >
                     {row.data ? <CheckCircle2 size={14} className="shrink-0" /> : <XCircle size={14} className="shrink-0" />}

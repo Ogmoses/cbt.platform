@@ -151,7 +151,7 @@ export default function PeopleManager({
                 >
                   {p.isActive ? <Ban size={15} /> : <CheckCircle size={15} />}
                 </button>
-                <button onClick={() => setDeleteTarget(p)} className="rounded-md p-1.5 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500" title="Delete">
+                <button onClick={() => setDeleteTarget(p)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500" title="Delete">
                   <Trash2 size={15} />
                 </button>
               </div>

@@ -138,7 +138,7 @@ export default function TeacherOverviewPage() {
 function StatCard({ icon: Icon, label, value, tone = "default" }: { icon: React.ElementType; label: string; value: number; tone?: "warn" | "default" }) {
   return (
     <div className="rounded-lg border border-black/5 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#1A1C20]">
-      <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-md ${tone === "warn" ? "bg-crimson-50 text-crimson-700 dark:bg-crimson-600/15 dark:text-crimson-500" : "bg-background-muted text-ink/60 dark:bg-white/5 dark:text-on-crimson/60"}`}>
+      <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-md ${tone === "warn" ? "bg-crimson-50 text-crimson-700 dark:bg-crimson-600/15 dark:text-crimson-500" : "bg-background-muted text-ink/60 dark:bg-white/5 dark:text-white/60"}`}>
         <Icon size={16} />
       </div>
       <p className="font-display text-[19px] font-semibold text-ink dark:text-white">{value}</p>

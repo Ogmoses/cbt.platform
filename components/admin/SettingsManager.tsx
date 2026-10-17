@@ -21,7 +21,7 @@ interface SettingsManagerProps {
 
 export default function SettingsManager({ profile, gradingScale, onSaveProfile, onSaveGradingScale, onSaveTheme }: SettingsManagerProps) {
   return (
-    <div className="max-w-2xl space-y-6 pb-10">
+    <div className="max-w-2xl space-y-6 pb-10 lg:max-w-4xl">
       <div>
         <h1 className="font-display text-[18px] font-semibold text-ink dark:text-white sm:text-[20px]">Settings</h1>
         <p className="mt-0.5 text-[13px] text-ink/50 dark:text-white/50">School profile and the grading scale used across results and report cards.</p>
@@ -241,7 +241,7 @@ function GradingScaleSection({ bands: initialBands, onSave }: { bands: GradeBand
             <input type="number" value={b.maxScore} onChange={(e) => update(b.id, { maxScore: Number(e.target.value) })} className="w-full min-w-0 rounded-lg border border-black/10 dark:border-white/15 px-2.5 py-2 text-[12.5px] outline-none focus:border-crimson-500" />
             <input value={b.gradeLetter} onChange={(e) => update(b.id, { gradeLetter: e.target.value })} className="w-full min-w-0 rounded-lg border border-black/10 dark:border-white/15 px-2.5 py-2 text-[12.5px] outline-none focus:border-crimson-500" />
             <input value={b.remark} onChange={(e) => update(b.id, { remark: e.target.value })} className="w-full min-w-0 rounded-lg border border-black/10 dark:border-white/15 px-2.5 py-2 text-[12.5px] outline-none focus:border-crimson-500" />
-            <button onClick={() => removeBand(b.id)} className="shrink-0 rounded-md p-2 text-ink/30 dark:text-on-crimson/30 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+            <button onClick={() => removeBand(b.id)} className="shrink-0 rounded-md p-2 text-ink/30 dark:text-white/30 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
               <Trash2 size={14} />
             </button>
           </div>
@@ -261,7 +261,7 @@ function GradingScaleSection({ bands: initialBands, onSave }: { bands: GradeBand
               <div className="flex-1">
                 <MiniField label="Remark" value={b.remark} onChange={(v) => update(b.id, { remark: v })} />
               </div>
-              <button onClick={() => removeBand(b.id)} className="shrink-0 rounded-md border border-black/10 dark:border-white/15 p-2.5 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+              <button onClick={() => removeBand(b.id)} className="shrink-0 rounded-md border border-black/10 dark:border-white/15 p-2.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                 <Trash2 size={14} />
               </button>
             </div>

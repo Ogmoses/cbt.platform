@@ -79,8 +79,27 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
     reader.readAsDataURL(file);
   };
 
+  const MAX_AUTO_OPTIONS = 8; // sane ceiling so this can't run away indefinitely
+
   const updateOption = (id: string, patch: Partial<QuestionOption>) => {
-    setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+    setOptions((prev) => {
+      const next = prev.map((o) => (o.id === id ? { ...o, ...patch } : o));
+      // Once the teacher starts typing into what's currently the last
+      // option, a fresh empty one appears automatically — no need to tap
+      // "Add option" after every single choice. This only fires once per
+      // option (the moment it goes from empty to non-empty while still
+      // being last), not on every keystroke: as soon as the new empty
+      // option exists, it — not the one just filled in — becomes "last",
+      // so typing further into the original field no longer matches.
+      // Empty options are filtered out on save regardless (see
+      // handleSubmit below), so one left untouched at the end is simply
+      // discarded, never submitted.
+      const last = next[next.length - 1];
+      if (type === "multiple_choice" && next.length < MAX_AUTO_OPTIONS && last?.id === id && last.text.trim().length > 0) {
+        return [...next, newOption()];
+      }
+      return next;
+    });
   };
 
   const markCorrect = (id: string) => {
@@ -212,7 +231,7 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
                   type="button"
                   onClick={() => handleTypeChange(t)}
                   className={`rounded-md px-2.5 py-2 text-[12px] font-medium transition-colors duration-200 ${
-                    type === t ? "bg-crimson-600 text-on-crimson" : "bg-background-muted dark:bg-white/5 text-ink/60 dark:text-on-crimson/60 hover:bg-black/5"
+                    type === t ? "bg-crimson-600 text-on-crimson" : "bg-background-muted dark:bg-white/5 text-ink/60 dark:text-white/60 hover:bg-black/5"
                   }`}
                 >
                   {QUESTION_TYPE_LABEL[t]}

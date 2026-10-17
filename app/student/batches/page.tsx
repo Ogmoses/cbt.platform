@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock } from "lucide-react";
+import { getReliableNow } from "@/lib/serverTime";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import PageLoading from "@/components/layout/PageLoading";
 import { createClient } from "@/lib/supabase/client";
@@ -39,7 +40,7 @@ export default function StudentBatchesPage() {
         .select("exam_batches(id, label, starts_at, ends_at, exams(title, subjects(name)))")
         .eq("student_id", authUser.id);
 
-      const now = new Date();
+      const now = await getReliableNow();
       const upcoming = (data ?? [])
         .map((row: any) => row.exam_batches)
         .filter((b: any) => b && new Date(b.starts_at) > now)

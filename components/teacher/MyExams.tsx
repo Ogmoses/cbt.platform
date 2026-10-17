@@ -95,7 +95,7 @@ function ExamRow({ exam, onEdit, onReuse, onViewRoster, onRequestDelete }: {
           </button>
         )}
         {exam.status !== "archived" && (
-          <button onClick={onRequestDelete} className="rounded-md p-2 text-ink/50 dark:text-on-crimson/50 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-600" title={exam.hasStudentActivity ? "Archive" : "Delete"}>
+          <button onClick={onRequestDelete} className="rounded-md p-2 text-ink/50 dark:text-white/50 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-600" title={exam.hasStudentActivity ? "Archive" : "Delete"}>
             {exam.hasStudentActivity ? <Archive size={15} /> : <Trash2 size={15} />}
           </button>
         )}

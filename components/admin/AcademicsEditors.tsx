@@ -213,7 +213,7 @@ export function SubjectEditor({ initial, classOptions, onSave, onCancel }: {
               type="button"
               onClick={() => toggleClass(c.id)}
               className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors duration-200 ${
-                classIds.includes(c.id) ? "bg-crimson-600 text-on-crimson" : "bg-background-muted dark:bg-white/5 text-ink/60 dark:text-on-crimson/60 hover:bg-black/5"
+                classIds.includes(c.id) ? "bg-crimson-600 text-on-crimson" : "bg-background-muted dark:bg-white/5 text-ink/60 dark:text-white/60 hover:bg-black/5"
               }`}
             >
               {c.name}

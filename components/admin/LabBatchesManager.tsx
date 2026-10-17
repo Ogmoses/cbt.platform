@@ -68,7 +68,7 @@ export default function LabBatchesManager({ rooms, templates, onSaveRoom, onDele
                     <button onClick={() => setTemplateEditor(t)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
                       <Pencil size={15} />
                     </button>
-                    <button onClick={() => onDeleteTemplate(t.id)} className="rounded-md p-1.5 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+                    <button onClick={() => onDeleteTemplate(t.id)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -101,7 +101,7 @@ export default function LabBatchesManager({ rooms, templates, onSaveRoom, onDele
                     <button onClick={() => setRoomEditor(r)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
                       <Pencil size={15} />
                     </button>
-                    <button onClick={() => onDeleteRoom(r.id)} className="rounded-md p-1.5 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+                    <button onClick={() => onDeleteRoom(r.id)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                       <Trash2 size={15} />
                     </button>
                   </div>

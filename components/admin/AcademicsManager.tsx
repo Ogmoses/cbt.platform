@@ -110,7 +110,7 @@ function SessionsTab({ sessions, terms, onSaveSession, onDeleteSession, onSaveTe
                 <span onClick={(e) => { e.stopPropagation(); setSessionEditor(session); }} className="rounded-md p-1 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
                   <Pencil size={14} />
                 </span>
-                <span onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }} className="rounded-md p-1 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+                <span onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }} className="rounded-md p-1 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                   <Trash2 size={14} />
                 </span>
               </button>
@@ -129,7 +129,7 @@ function SessionsTab({ sessions, terms, onSaveSession, onDeleteSession, onSaveTe
                           <button onClick={() => setTermEditor({ sessionId: session.id, term })} className="rounded-md p-1 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => onDeleteTerm(term.id)} className="rounded-md p-1 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+                          <button onClick={() => onDeleteTerm(term.id)} className="rounded-md p-1 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -197,7 +197,7 @@ function ClassesTab({ classes, onSave, onDelete }: { classes: ClassRow[]; onSave
               <button onClick={() => setEditor(c)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
                 <Pencil size={15} />
               </button>
-              <button onClick={() => onDelete(c.id)} className="rounded-md p-1.5 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+              <button onClick={() => onDelete(c.id)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                 <Trash2 size={15} />
               </button>
             </div>
@@ -247,7 +247,7 @@ function SubjectsTab({ subjects, classes, onSave, onDelete }: {
               <button onClick={() => setEditor(s)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
                 <Pencil size={15} />
               </button>
-              <button onClick={() => onDelete(s.id)} className="rounded-md p-1.5 text-ink/40 dark:text-on-crimson/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+              <button onClick={() => onDelete(s.id)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                 <Trash2 size={15} />
               </button>
             </div>

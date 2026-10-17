@@ -133,7 +133,7 @@ export default function PersonEditor({ role, initial, classOptions, subjectOptio
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
-                      <button onClick={() => removeAssignment(i)} className="shrink-0 rounded-md p-2 text-ink/30 dark:text-on-crimson/30 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+                      <button onClick={() => removeAssignment(i)} className="shrink-0 rounded-md p-2 text-ink/30 dark:text-white/30 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
                         <Trash2 size={14} />
                       </button>
                     </div>

@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getReliableNowSync } from "@/lib/serverTime";
 import {
   Clock,
   ChevronRight,
@@ -61,12 +62,16 @@ interface ExamLaunchpadProps {
 
 export default function ExamLaunchpad({ studentName, availableExams, upcomingBatches, pastResults }: ExamLaunchpadProps) {
   const router = useRouter();
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => getReliableNowSync());
 
   // Refresh "now" periodically so batch windows open/close live on screen,
   // without a full countdown-timer tick (that belongs to ExamInterface).
+  // Uses the device clock corrected against the server's (see
+  // lib/serverTime.ts) rather than a raw `new Date()` here too — the
+  // initial page load already resolved the offset, so this just reuses
+  // it rather than re-fetching every 30 seconds.
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30_000);
+    const t = setInterval(() => setNow(getReliableNowSync()), 30_000);
     return () => clearInterval(t);
   }, []);
 
@@ -87,7 +92,13 @@ export default function ExamLaunchpad({ studentName, availableExams, upcomingBat
         {availableExams.length === 0 ? (
           <EmptyState message="No exams are open for you right now. Check Upcoming Batches below." />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/* flex-wrap rather than a fixed-column grid: a grid with only
+              1–2 cards in a 3-column row leaves two empty equal-width
+              tracks beside it, which reads as "the page isn't using the
+              screen" on a wide desktop monitor. Flex-wrap lets each card
+              take its own natural width and wrap only once there's
+              actually enough content to need it. */}
+          <div className="flex flex-wrap gap-4">
             {availableExams.map((exam) => (
               <ExamCard key={exam.examId} exam={exam} now={now} onEnter={() => router.push(`/student/exam/${exam.examId}?batch=${exam.batchId}`)} />
             ))}
@@ -195,7 +206,7 @@ function ExamCard({ exam, now, onEnter }: { exam: AvailableExam; now: Date; onEn
   const isPast = now > endsAt;
 
   return (
-    <div className="flex flex-col rounded-lg border border-black/5 bg-white p-4.5 shadow-card transition-shadow duration-200 hover:shadow-card-hover dark:border-white/10 dark:bg-[#1A1C20]">
+    <div className="flex w-full flex-col rounded-lg border border-black/5 bg-white p-4.5 shadow-card transition-shadow duration-200 hover:shadow-card-hover dark:border-white/10 dark:bg-[#1A1C20] sm:w-[320px]">
       <div className="mb-3 flex items-center justify-between">
         <span className="rounded-full bg-cream-100 px-2.5 py-1 text-[11px] font-semibold text-crimson-700 dark:bg-crimson-600/15 dark:text-crimson-500">{exam.subjectName}</span>
         <span className="flex items-center gap-1 text-[11.5px] text-ink/45 dark:text-white/45">

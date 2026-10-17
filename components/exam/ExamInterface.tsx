@@ -222,7 +222,7 @@ export default function ExamInterface({ exam, sessionId, studentName, initialAns
 
           <button
             onClick={() => setPaletteOpen(true)}
-            className="rounded-lg bg-background-muted dark:bg-white/5 p-2 text-ink/70 dark:text-on-crimson/70 transition-colors duration-200 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500 lg:hidden"
+            className="rounded-lg bg-background-muted dark:bg-white/5 p-2 text-ink/70 dark:text-white/70 transition-colors duration-200 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500 lg:hidden"
             aria-label="Question palette"
           >
             <Grid3x3 size={18} />
@@ -245,7 +245,7 @@ export default function ExamInterface({ exam, sessionId, studentName, initialAns
       <div className="flex flex-1 overflow-hidden">
         {/* Question area */}
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 lg:px-12">
-          <div className="mx-auto max-w-2xl">
+          <div className="mx-auto max-w-2xl lg:max-w-3xl">
             <div className="mb-4 flex items-center justify-between">
               <span className="text-[12px] font-medium uppercase tracking-wide text-ink/40 dark:text-white/40">
                 Question {currentIndex + 1} of {total}

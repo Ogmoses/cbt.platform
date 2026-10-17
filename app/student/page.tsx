@@ -11,6 +11,7 @@ import ExamLaunchpad, {
 import { createClient } from "@/lib/supabase/client";
 import { useAuthUser, signOutAndRedirect } from "@/lib/useAuthUser";
 import { fetchExamMaxScores } from "@/lib/reportCard";
+import { getReliableNow } from "@/lib/serverTime";
 import PageLoading from "@/components/layout/PageLoading";
 import ErrorState from "@/components/layout/ErrorState";
 
@@ -34,7 +35,11 @@ export default function StudentHomePage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const now = new Date();
+        // Uses the server's clock, not this device's — a wrong or
+        // deliberately fast-forwarded device clock would otherwise hide
+        // a genuinely open exam, or make a not-yet-open one look
+        // available (see lib/serverTime.ts and app/api/server-time).
+        const now = await getReliableNow();
 
         const [{ data: batchRows }, { data: sessionRows }, { data: resultRows }] = await Promise.all([
           supabase
