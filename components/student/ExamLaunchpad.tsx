@@ -92,12 +92,12 @@ export default function ExamLaunchpad({ studentName, availableExams, upcomingBat
         {availableExams.length === 0 ? (
           <EmptyState message="No exams are open for you right now. Check Upcoming Batches below." />
         ) : (
-          {/* flex-wrap rather than a fixed-column grid: a grid with only
-              1–2 cards in a 3-column row leaves two empty equal-width
-              tracks beside it, which reads as "the page isn't using the
-              screen" on a wide desktop monitor. Flex-wrap lets each card
-              take its own natural width and wrap only once there's
-              actually enough content to need it. */}
+          /* flex-wrap rather than a fixed-column grid: a grid with only
+             1–2 cards in a 3-column row leaves two empty equal-width
+             tracks beside it, which reads as "the page isn't using the
+             screen" on a wide desktop monitor. Flex-wrap lets each card
+             take its own natural width and wrap only once there's
+             actually enough content to need it. */
           <div className="flex flex-wrap gap-4">
             {availableExams.map((exam) => (
               <ExamCard key={exam.examId} exam={exam} now={now} onEnter={() => router.push(`/student/exam/${exam.examId}?batch=${exam.batchId}`)} />
