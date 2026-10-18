@@ -8,8 +8,9 @@
 
 import { useMemo, useState } from "react";
 import MathText from "@/components/common/MathText";
-import { Plus, Pencil, Trash2, Search, ImageIcon, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ImageIcon, AlertCircle, Upload } from "lucide-react";
 import QuestionEditor from "./QuestionEditor";
+import QuestionImportModal from "./QuestionImportModal";
 import { QUESTION_TYPE_LABEL, type BankQuestion, type ClassOption, type SubjectOption } from "./types";
 
 interface QuestionBankManagerProps {
@@ -28,6 +29,7 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
   const [editorState, setEditorState] = useState<"closed" | "new" | BankQuestion>("closed");
   const [deleteTarget, setDeleteTarget] = useState<BankQuestion | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const unclassifiedCount = useMemo(() => questions.filter((q) => !q.classId).length, [questions]);
 
@@ -61,12 +63,20 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
           <h1 className="font-display text-[18px] font-semibold text-ink dark:text-white sm:text-[20px]">Question bank</h1>
           <p className="mt-0.5 text-[13px] text-ink/50 dark:text-white/50">{questions.length} question{questions.length === 1 ? "" : "s"} across your subjects</p>
         </div>
-        <button
-          onClick={() => setEditorState("new")}
-          className="flex items-center justify-center gap-1.5 rounded-lg bg-crimson-600 px-4 py-2.5 text-[13px] font-semibold text-on-crimson transition-colors duration-200 hover:bg-crimson-700"
-        >
-          <Plus size={16} /> New question
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-black/10 px-4 py-2.5 text-[13px] font-semibold text-ink/70 transition-colors duration-200 hover:bg-background-muted dark:border-white/15 dark:text-white/70 dark:hover:bg-white/5"
+          >
+            <Upload size={16} /> Import
+          </button>
+          <button
+            onClick={() => setEditorState("new")}
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-crimson-600 px-4 py-2.5 text-[13px] font-semibold text-on-crimson transition-colors duration-200 hover:bg-crimson-700"
+          >
+            <Plus size={16} /> New question
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
@@ -170,6 +180,10 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
           onSave={handleSave}
           onCancel={() => setEditorState("closed")}
         />
+      )}
+
+      {showImport && (
+        <QuestionImportModal subjects={subjects} classes={classes} onCreate={onCreate} onClose={() => setShowImport(false)} />
       )}
 
       {deleteTarget && (

@@ -18,7 +18,8 @@
     "framer-motion": "^11.18.0",
     "lucide-react": "^1.30.0",
     "nodemailer": "^6.9.16",
-    "katex": "^0.16.11"
+    "katex": "^0.16.11",
+    "mammoth": "^1.8.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
