@@ -7,7 +7,7 @@ import QuestionBankManager from "@/components/teacher/QuestionBankManager";
 import { createClient } from "@/lib/supabase/client";
 import { orThrow } from "@/lib/supabaseErrors";
 import { useAuthUser, signOutAndRedirect } from "@/lib/useAuthUser";
-import type { BankQuestion, ClassOption, SubjectOption } from "@/components/teacher/types";
+import type { BankQuestion, ClassOption, SubjectOption, ImportBatch } from "@/components/teacher/types";
 import PageLoading from "@/components/layout/PageLoading";
 
 export default function TeacherQuestionsPage() {
@@ -27,7 +27,9 @@ export default function TeacherQuestionsPage() {
       supabase.from("teacher_subjects").select("subjects(id, name), classes(id, name)").eq("teacher_id", authUser.id),
       supabase
         .from("questions")
-        .select("id, subject_id, class_id, topic, type, prompt, image_url, points, reference_answer, updated_at, subjects(name), classes(name), question_options(id, option_text, is_correct, order_index)")
+        .select(
+          "id, subject_id, class_id, topic, type, prompt, image_url, points, reference_answer, updated_at, import_group_id, import_group_label, subjects(name), classes(name), question_options(id, option_text, is_correct, order_index)"
+        )
         .eq("created_by", authUser.id)
         .order("updated_at", { ascending: false }),
     ]);
@@ -72,6 +74,8 @@ export default function TeacherQuestionsPage() {
           .map((o: any) => ({ id: o.id, text: o.option_text, isCorrect: o.is_correct })),
         referenceAnswer: q.reference_answer,
         updatedAt: q.updated_at,
+        importGroupId: q.import_group_id,
+        importGroupLabel: q.import_group_label,
       }))
     );
     setLoading(false);
@@ -162,7 +166,10 @@ export default function TeacherQuestionsPage() {
     }.`;
   };
 
-  const handleCreate = async (q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">) => {
+  const handleCreate = async (
+    q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">,
+    opts?: { skipReload?: boolean }
+  ) => {
     if (!authUser) return;
     const { data: created, error } = await supabase
       .from("questions")
@@ -176,12 +183,18 @@ export default function TeacherQuestionsPage() {
         image_url: q.imageUrl ?? null, // TODO: upload to Supabase Storage instead of a data: URL
         points: q.points,
         reference_answer: q.referenceAnswer ?? null,
+        import_group_id: q.importGroupId ?? null,
+        import_group_label: q.importGroupLabel ?? null,
       })
       .select("id")
       .single();
     if (error || !created) throw new Error(error?.message ?? "Couldn't save the question.");
     if (q.options) await syncOptions(created.id, q.options, []);
-    await loadAll();
+    // Bulk import saves many questions in a tight loop — reloading the
+    // full list after every single one would mean dozens of redundant
+    // round-trips for one import. The caller does one loadAll() itself
+    // once the whole batch is done instead.
+    if (!opts?.skipReload) await loadAll();
   };
 
   const handleUpdate = async (id: string, q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">) => {
@@ -212,10 +225,85 @@ export default function TeacherQuestionsPage() {
     await loadAll();
   };
 
+  // --- In-progress bulk-import reviews ("Reviewing" section) ---------
+  // See components/teacher/QuestionImportModal.tsx for where these are
+  // written (closing the review screen before finishing saves one) and
+  // read back (resuming one reopens the modal with its saved state).
+
+  const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
+
+  const loadImportBatches = async () => {
+    if (!authUser) return;
+    const { data } = await supabase
+      .from("question_import_batches")
+      .select("id, subject_id, class_id, source_filename, draft_questions, updated_at")
+      .eq("created_by", authUser.id)
+      .order("updated_at", { ascending: false });
+    setImportBatches(
+      (data ?? []).map((b) => ({
+        id: b.id,
+        subjectId: b.subject_id,
+        classId: b.class_id,
+        sourceFilename: b.source_filename,
+        draftQuestions: b.draft_questions,
+        updatedAt: b.updated_at,
+      }))
+    );
+  };
+
+  useEffect(() => {
+    loadImportBatches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.id]);
+
+  const handleSaveImportBatch = async (batch: {
+    id?: string;
+    subjectId: string;
+    classId: string | null;
+    sourceFilename: string | null;
+    draftQuestions: unknown;
+  }) => {
+    if (!authUser) return;
+    if (batch.id) {
+      await orThrow(
+        supabase
+          .from("question_import_batches")
+          .update({ draft_questions: batch.draftQuestions, updated_at: new Date().toISOString() })
+          .eq("id", batch.id)
+      );
+    } else {
+      await orThrow(
+        supabase.from("question_import_batches").insert({
+          created_by: authUser.id,
+          subject_id: batch.subjectId,
+          class_id: batch.classId,
+          source_filename: batch.sourceFilename,
+          draft_questions: batch.draftQuestions,
+        })
+      );
+    }
+    await loadImportBatches();
+  };
+
+  const handleDeleteImportBatch = async (id: string) => {
+    await orThrow(supabase.from("question_import_batches").delete().eq("id", id));
+    await loadImportBatches();
+  };
+
   return (
     <DashboardLayout role="teacher" pageTitle="Question Bank" userName={authUser?.fullName ?? ""} onLogout={() => signOutAndRedirect(router)}>
       {loading ? <PageLoading /> : (
-        <QuestionBankManager subjects={subjects} classes={classes} questions={questions} onCreate={handleCreate} onUpdate={handleUpdate} onDelete={handleDelete} />
+        <QuestionBankManager
+          subjects={subjects}
+          classes={classes}
+          questions={questions}
+          onCreate={handleCreate}
+          onUpdate={handleUpdate}
+          onDelete={handleDelete}
+          importBatches={importBatches}
+          onSaveImportBatch={handleSaveImportBatch}
+          onDeleteImportBatch={handleDeleteImportBatch}
+        />
       )}
     </DashboardLayout>
   );

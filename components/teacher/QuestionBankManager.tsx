@@ -8,21 +8,37 @@
 
 import { useMemo, useState } from "react";
 import MathText from "@/components/common/MathText";
-import { Plus, Pencil, Trash2, Search, ImageIcon, AlertCircle, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ImageIcon, AlertCircle, Upload, ChevronDown, ChevronRight, FolderOpen, Clock, X } from "lucide-react";
 import QuestionEditor from "./QuestionEditor";
 import QuestionImportModal from "./QuestionImportModal";
-import { QUESTION_TYPE_LABEL, type BankQuestion, type ClassOption, type SubjectOption } from "./types";
+import { QUESTION_TYPE_LABEL, type BankQuestion, type ClassOption, type SubjectOption, type ImportBatch } from "./types";
 
 interface QuestionBankManagerProps {
   subjects: SubjectOption[];
   classes: ClassOption[];
   questions: BankQuestion[];
-  onCreate: (q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">) => Promise<void>;
+  onCreate: (q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">, opts?: { skipReload?: boolean }) => Promise<void>;
   onUpdate: (id: string, q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">) => Promise<{ warning?: string } | void>;
   onDelete: (id: string) => Promise<void>;
+  importBatches: ImportBatch[];
+  onSaveImportBatch: (batch: { id?: string; subjectId: string; classId: string | null; sourceFilename: string | null; draftQuestions: unknown }) => Promise<void>;
+  onDeleteImportBatch: (id: string) => Promise<void>;
 }
 
-export default function QuestionBankManager({ subjects, classes, questions, onCreate, onUpdate, onDelete }: QuestionBankManagerProps) {
+/** One row in the rendered list: either a plain question, or a collapsed group of bulk-imported ones sharing an importGroupId. */
+type ListRow = { kind: "single"; question: BankQuestion } | { kind: "group"; groupId: string; label: string; questions: BankQuestion[] };
+
+export default function QuestionBankManager({
+  subjects,
+  classes,
+  questions,
+  onCreate,
+  onUpdate,
+  onDelete,
+  importBatches,
+  onSaveImportBatch,
+  onDeleteImportBatch,
+}: QuestionBankManagerProps) {
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
   const [classFilter, setClassFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -30,6 +46,9 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
   const [deleteTarget, setDeleteTarget] = useState<BankQuestion | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [resumeBatch, setResumeBatch] = useState<ImportBatch | null>(null);
+  const [discardBatchTarget, setDiscardBatchTarget] = useState<ImportBatch | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const unclassifiedCount = useMemo(() => questions.filter((q) => !q.classId).length, [questions]);
 
@@ -42,6 +61,36 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
       return true;
     });
   }, [questions, subjectFilter, classFilter, search]);
+
+  // Bulk-imported questions that share an importGroupId collapse into one
+  // row ("Subject — Class · N questions") instead of listing N rows that
+  // crowd out everything else — a 60-question import shouldn't push
+  // every hand-typed question off the first screen. Order is preserved:
+  // a group appears where its first member would have.
+  const rows = useMemo<ListRow[]>(() => {
+    const seen = new Set<string>();
+    const result: ListRow[] = [];
+    for (const q of filtered) {
+      if (q.importGroupId) {
+        if (seen.has(q.importGroupId)) continue;
+        seen.add(q.importGroupId);
+        const members = filtered.filter((m) => m.importGroupId === q.importGroupId);
+        result.push({ kind: "group", groupId: q.importGroupId, label: q.importGroupLabel || "Imported questions", questions: members });
+      } else {
+        result.push({ kind: "single", question: q });
+      }
+    }
+    return result;
+  }, [filtered]);
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
 
   const handleSave = async (data: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className"> & { id?: string }) => {
     if (data.id) {
@@ -132,40 +181,76 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
         </button>
       )}
 
-      {filtered.length === 0 ? (
+      {importBatches.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-ink/50 dark:text-white/50">
+            <Clock size={13} /> Reviewing — saved partway through, not yet in your bank
+          </p>
+          <div className="divide-y divide-black/5 dark:divide-white/10 rounded-lg border border-black/5 dark:border-white/10 bg-white dark:bg-[#1A1C20]">
+            {importBatches.map((b) => {
+              const count = Array.isArray(b.draftQuestions) ? b.draftQuestions.length : 0;
+              const subjectName = subjects.find((s) => s.id === b.subjectId)?.name ?? "Unknown subject";
+              const className = classes.find((c) => c.id === b.classId)?.name ?? "Unclassified";
+              return (
+                <div key={b.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-ink dark:text-white">{subjectName} — {className}</p>
+                    <p className="text-[11.5px] text-ink/45 dark:text-white/45">
+                      {count} question{count === 1 ? "" : "s"}{b.sourceFilename ? ` · from ${b.sourceFilename}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setResumeBatch(b)}
+                    className="shrink-0 rounded-lg border border-black/10 dark:border-white/15 px-3 py-1.5 text-[12px] font-medium text-ink/70 dark:text-white/70 hover:bg-background-muted dark:hover:bg-white/5"
+                  >
+                    Resume
+                  </button>
+                  <button onClick={() => setDiscardBatchTarget(b)} className="shrink-0 rounded-md p-1.5 text-ink/30 dark:text-white/30 hover:text-crimson-600">
+                    <X size={15} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-black/10 dark:border-white/15 bg-white dark:bg-[#1A1C20] px-4 py-10 text-center text-[13px] text-ink/45 dark:text-white/45">
           No questions match. Try a different filter, or add your first question.
         </div>
       ) : (
         <div className="divide-y divide-black/5 dark:divide-white/10 rounded-lg border border-black/5 dark:border-white/10 bg-white dark:bg-[#1A1C20]">
-          {filtered.map((q) => (
-            <div key={q.id} className="flex items-start gap-3.5 px-4 py-3.5 sm:px-5">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="rounded-full bg-cream-100 px-2 py-0.5 text-[10.5px] font-semibold text-crimson-700 dark:text-crimson-500">
-                    {QUESTION_TYPE_LABEL[q.type]}
-                  </span>
-                  <span className="text-[11.5px] text-ink/40 dark:text-white/40">{q.subjectName}{q.topic ? ` · ${q.topic}` : ""}</span>
-                  {q.classId ? (
-                    <span className="rounded-full bg-background-muted dark:bg-white/5 px-2 py-0.5 text-[10.5px] font-medium text-ink/55 dark:text-white/55">{q.className}</span>
+          {rows.map((row) =>
+            row.kind === "group" ? (
+              <div key={row.groupId}>
+                <button
+                  onClick={() => toggleGroup(row.groupId)}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left sm:px-5 hover:bg-background-muted dark:hover:bg-white/5"
+                >
+                  {expandedGroups.has(row.groupId) ? (
+                    <ChevronDown size={15} className="shrink-0 text-ink/40 dark:text-white/40" />
                   ) : (
-                    <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-warning">Unclassified</span>
+                    <ChevronRight size={15} className="shrink-0 text-ink/40 dark:text-white/40" />
                   )}
-                  {q.imageUrl && <ImageIcon size={12} className="text-ink/30 dark:text-white/30" />}
-                </div>
-                <MathText text={q.prompt} className="block break-words text-[13.5px] text-ink dark:text-white" />
-              </div>
-              <span className="shrink-0 pt-0.5 text-[12px] font-medium text-ink/40 dark:text-white/40">{q.points} pt{q.points === 1 ? "" : "s"}</span>
-              <div className="flex shrink-0 items-center gap-1 pt-0.5">
-                <button onClick={() => setEditorState(q)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
-                  <Pencil size={15} />
+                  <FolderOpen size={16} className="shrink-0 text-crimson-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13.5px] font-medium text-ink dark:text-white">{row.label}</p>
+                    <p className="text-[11.5px] text-ink/45 dark:text-white/45">{row.questions.length} questions · imported</p>
+                  </div>
                 </button>
-                <button onClick={() => setDeleteTarget(q)} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
-                  <Trash2 size={15} />
-                </button>
+                {expandedGroups.has(row.groupId) && (
+                  <div className="divide-y divide-black/5 border-t border-black/5 bg-background-muted/40 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.02]">
+                    {row.questions.map((q) => (
+                      <QuestionRow key={q.id} q={q} onEdit={() => setEditorState(q)} onDelete={() => setDeleteTarget(q)} indent />
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            ) : (
+              <QuestionRow key={row.question.id} q={row.question} onEdit={() => setEditorState(row.question)} onDelete={() => setDeleteTarget(row.question)} />
+            )
+          )}
         </div>
       )}
 
@@ -183,7 +268,53 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
       )}
 
       {showImport && (
-        <QuestionImportModal subjects={subjects} classes={classes} onCreate={onCreate} onClose={() => setShowImport(false)} />
+        <QuestionImportModal
+          subjects={subjects}
+          classes={classes}
+          onCreate={onCreate}
+          onClose={() => setShowImport(false)}
+          onSaveForLater={async (b) => onSaveImportBatch(b)}
+        />
+      )}
+
+      {resumeBatch && (
+        <QuestionImportModal
+          subjects={subjects}
+          classes={classes}
+          onCreate={onCreate}
+          onClose={() => setResumeBatch(null)}
+          onSaveForLater={async (b) => onSaveImportBatch(b)}
+          resumeBatch={resumeBatch}
+          onFinishedResume={() => onDeleteImportBatch(resumeBatch.id)}
+        />
+      )}
+
+      {discardBatchTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white dark:bg-[#1A1C20] p-6 shadow-card-hover">
+            <h2 className="font-display text-[15px] font-semibold text-ink dark:text-white">Discard this in-progress review?</h2>
+            <p className="mt-1.5 text-[13px] text-ink/60 dark:text-white/60">
+              Nothing from it has been saved to your bank yet — this removes it for good.
+            </p>
+            <div className="mt-4 flex gap-2.5">
+              <button
+                onClick={() => setDiscardBatchTarget(null)}
+                className="flex-1 rounded-lg border border-black/10 dark:border-white/15 py-2.5 text-[13px] font-medium text-ink/70 dark:text-white/70 hover:bg-background-muted dark:hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await onDeleteImportBatch(discardBatchTarget.id);
+                  setDiscardBatchTarget(null);
+                }}
+                className="flex-1 rounded-lg bg-crimson-600 py-2.5 text-[13px] font-semibold text-on-crimson hover:bg-crimson-700"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {deleteTarget && (
@@ -213,6 +344,37 @@ export default function QuestionBankManager({ subjects, classes, questions, onCr
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function QuestionRow({ q, onEdit, onDelete, indent }: { q: BankQuestion; onEdit: () => void; onDelete: () => void; indent?: boolean }) {
+  return (
+    <div className={`flex items-start gap-3.5 px-4 py-3.5 sm:px-5 ${indent ? "pl-9 sm:pl-11" : ""}`}>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="rounded-full bg-cream-100 px-2 py-0.5 text-[10.5px] font-semibold text-crimson-700 dark:text-crimson-500">
+            {QUESTION_TYPE_LABEL[q.type]}
+          </span>
+          <span className="text-[11.5px] text-ink/40 dark:text-white/40">{q.subjectName}{q.topic ? ` · ${q.topic}` : ""}</span>
+          {q.classId ? (
+            <span className="rounded-full bg-background-muted dark:bg-white/5 px-2 py-0.5 text-[10.5px] font-medium text-ink/55 dark:text-white/55">{q.className}</span>
+          ) : (
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-warning">Unclassified</span>
+          )}
+          {q.imageUrl && <ImageIcon size={12} className="text-ink/30 dark:text-white/30" />}
+        </div>
+        <MathText text={q.prompt} className="block break-words text-[13.5px] text-ink dark:text-white" />
+      </div>
+      <span className="shrink-0 pt-0.5 text-[12px] font-medium text-ink/40 dark:text-white/40">{q.points} pt{q.points === 1 ? "" : "s"}</span>
+      <div className="flex shrink-0 items-center gap-1 pt-0.5">
+        <button onClick={onEdit} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-background-muted dark:hover:bg-white/5 hover:text-ink dark:hover:text-white">
+          <Pencil size={15} />
+        </button>
+        <button onClick={onDelete} className="rounded-md p-1.5 text-ink/40 dark:text-white/40 hover:bg-crimson-50 dark:hover:bg-crimson-600/15 hover:text-crimson-700 dark:hover:text-crimson-500">
+          <Trash2 size={15} />
+        </button>
+      </div>
     </div>
   );
 }

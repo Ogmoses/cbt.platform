@@ -1,4 +1,4 @@
-# Soaring Fountain CBT & School Management Platform 
+# Soaring Fountain CBT & School Management Platform
 
 A complete, deployable Next.js (App Router) + Supabase project — not just
 source files to copy in. `npm install` and `npm run dev` work directly in
@@ -343,3 +343,166 @@ mechanism:
   `/reset-password` (existing teacher, admin-triggered). Neither needs any
   of the `onAuthStateChange` / hash-fragment handling `/register` needed,
   because there's no Supabase Auth session-from-URL step left to race.
+
+## Pass 6: results publishing, dark mode, site theming, math rendering, bulk question import
+
+A much larger batch of work than earlier passes — grouped here by area
+rather than strictly chronologically, since that's more useful to read
+back later. Everything below is live and has been deployed; see each
+section for what's genuinely tested vs. best-effort.
+
+### Results publishing & exam integrity
+- **Admin couldn't see or publish any results, ever** — `results` had RLS
+  policies for students (their own, published only) and teachers (their
+  own exams), but none for admins at all, so the Admin → Results page's
+  queries silently returned zero rows under RLS (not an error — just
+  nothing). Fixed with an `admin_manage_results` policy
+  (`database/migrations/003_admin_access_to_results.sql`).
+- **Student exam page crashed (infinite "Loading…", no error) once
+  results actually started getting published** — `fetchExamMaxScores`
+  computed a question bank's point total by joining into `questions`
+  directly, which students have no RLS access to (it holds answer keys).
+  The joined field came back `null`, and `.points` on `null` threw, with
+  no try/catch anywhere in the chain. Fixed by caching `max_score`
+  directly on `exams`, kept in sync by triggers whenever questions change
+  (`database/migrations/004_exam_max_score_cache.sql`) — reading a plain
+  column students already have access to, instead of needing a grant
+  that couldn't safely be given. Also added `components/layout/ErrorState.tsx`
+  and wrapped page loaders in try/catch generally, so a future failure
+  shows a retry button instead of hanging forever.
+- **Class Analytics pass rate was silently always 100%, permanently, for
+  any exam where that happened once** — `pass_mark` could be saved as `0`
+  (clearing the field in the exam builder turned it into `0`, not an
+  error, and nothing validated it), and `score% >= 0` is trivially true
+  for every score. Fixed with a builder-side validation and a DB
+  constraint (`exams_pass_mark_range`,
+  `database/migrations/005_exam_pass_mark_guard.sql`) requiring
+  `0 < pass_mark <= 100`.
+- **A student flagging a question during the exam went nowhere** —
+  `student_answers.is_flagged` was captured at submit time but nothing
+  ever displayed it. Added `components/teacher/StudentReview.tsx`, a
+  full per-student review screen (every question, their answer vs.
+  correct, points, flagged badge) opened by tapping a submitted student
+  in the exam roster.
+- **New: teacher-controlled student review.** `exams.allow_review`
+  (`database/migrations/006_exam_allow_review.sql`) lets a teacher allow
+  students to see which answers were right after an exam ends —
+  independent of `show_result_instantly` (that only reveals the score).
+  Gated server-side (`app/api/exam-sessions/review`) on every batch of
+  the exam having ended, not just the requesting student's own sitting —
+  otherwise an early finisher could leak correct answers to classmates
+  who haven't sat it yet.
+- **Device clock can't be trusted for "is this exam open."** A wrong or
+  deliberately fast-forwarded device clock could hide a genuinely open
+  exam, or make a closed one *look* available (though not actually start
+  it — `app/api/exam-sessions/start` already validated against the
+  server's own clock). `app/api/server-time` + `lib/serverTime.ts` now
+  correct the student-facing display for this too, by computing the
+  offset from the server's clock once per page load.
+- **Editing any field on a question broke once a student had answered
+  it** — saving unconditionally deleted and reinserted every option on
+  every save, and `question_options.id` is what
+  `student_answers.selected_option_id` points to. Fixed with a proper
+  diff (update existing options in place, insert only new ones, delete
+  only removed ones — and if a removal itself is blocked by that same
+  foreign key, it's kept with a message instead of failing the whole
+  save) in `app/teacher/questions/page.tsx`'s `syncOptions`.
+- Question editor: typing into the last option now appends a fresh empty
+  one automatically (capped at 8), and any option left empty on save is
+  silently dropped — no more repeated taps on "Add option".
+
+### Dark mode, site accent color, and a few real bugs found along the way
+- Full light/dark/system toggle (`lib/colorScheme.ts`,
+  `components/ColorSchemeSync.tsx`), per-person and stored in the
+  browser — covers the shared chrome, all three portals' main pages, the
+  exam-taking screen, grading, question bank, admin pages, and the
+  pre-login screens. **Known bug found and fixed along the way**: an
+  early broad regex sweep matched `bg-crimson-600` even inside unrelated
+  hover-only classes and wrongly changed 13 files' worth of icon
+  buttons' resting-state text color — now corrected.
+- **Site accent color is fully admin-configurable**, not fixed to the
+  original crimson — `lib/themes.ts` generates a full 50–900 shade ramp
+  from a single chosen color at read time. Originally shipped as an open
+  color picker; **changed back to a curated, fixed palette of 18 colors**
+  on request, since an arbitrary color (especially something pale, or
+  even white) made some button text unreadable. That contrast problem
+  is now fixed at the root either way: `getOnAccentColor()` picks
+  whichever of white or near-black text actually has better WCAG
+  contrast against the chosen color, exposed as `--color-on-crimson` /
+  the `on-crimson` Tailwind color, used by every button/badge instead of
+  a hardcoded `text-white`.
+- Admin Settings and the exam-taking question column were both capped at
+  a flat ~672px width regardless of screen size, which read as "stuck in
+  mobile layout" on a real desktop monitor — widened for large screens.
+  The student exam-card grid had the same issue for a different reason
+  (a 3-column grid with 1 card leaves two dead equal-width tracks) —
+  switched to `flex-wrap` with a fixed-ish card width instead.
+
+### Math formula rendering
+- `lib/mathDetect.ts` auto-detects math inside ordinary prose with zero
+  required markup (`x^2`, `H_2O`, `sqrt(16)`, whole equations like
+  `2x + 5 = 11`), rendered via KaTeX (`components/common/MathText.tsx`).
+  An explicit `\(...\)` or `$...$` always works as a trusted override for
+  anything the heuristic doesn't catch. Wired into every place a
+  question/option/reference-answer is shown: question bank, exam
+  builder, the live exam screen, grading, both review screens — plus a
+  live preview while typing in the question editor.
+
+### Bulk question import (Word or CSV)
+- First version assumed the wrong document shape entirely (numbered
+  question, options each on their own lettered line) — **rebuilt against
+  two real exam documents** once available, which actually use Word's
+  own auto-numbering (never appears in extracted text at all) with every
+  option inline on the same line as the question
+  (`"...is A. Newton B. Pascal-second C. Joule D. Watt"`). Verified
+  against those two real files: 60/60 and 51/51 objective questions
+  correctly split, up from "didn't parse at all" and "4 questions, all
+  wrong" respectively. Full detection + reasoning in
+  `lib/questionImportParser.ts`'s file header.
+- Deliberately never guesses which option is correct — parsing only
+  extracts prompt + option text; a teacher taps the correct answer for
+  every question on a review screen before anything saves, same as
+  creating one by hand.
+- Diagrams in the source `.docx` are detected per-question and flagged
+  (mammoth tags every image's position during extraction — see
+  `app/api/teacher/questions/parse-import` and
+  `lib/mammothHtmlToText.ts`); Word's native Equation Editor objects
+  don't survive text extraction at all and get one upfront notice
+  instead of an unreliable per-question flag.
+- **Known, accepted limitation**: multi-part theory/essay questions (a
+  numbered question with lettered or `i./ii./iii.` sub-parts) get
+  grouped into one combined free-response question rather than split —
+  there's no reliable marker to split them further. Expect more manual
+  cleanup on a theory-heavy import than an objectives-heavy one.
+- **Review progress is no longer lost if you close before finishing.**
+  Closing the review screen mid-way saves it as a resumable batch
+  (`question_import_batches` table, RLS-scoped to the owning teacher) —
+  shows up under a "Reviewing" section at the top of the Question Bank,
+  tap "Resume" to pick back up exactly where you left off.
+- **Every question from one import shares an `import_group_id` /
+  `import_group_label`** (`questions.import_group_id`,
+  `database/migrations/008_question_import_grouping_and_batches.sql`),
+  so a 60-question import shows as one collapsible "Subject — Class"
+  entry in the bank instead of 60 separate rows crowding out hand-typed
+  questions — and in the Exam Builder's question picker, the whole group
+  can be added to an exam in one tap instead of 60 individual ones.
+
+## Still to build (continued)
+- Bulk question import's theory/essay-section splitting is best-effort
+  only — see above. Worth revisiting with more real documents if a
+  teacher hits a case it handles badly.
+- No way yet to pull *individual* questions back out of an import group
+  once grouped (e.g. "I only want 12 of these 60 in this exam, not all
+  of them") without expanding the group in the bank and adding them one
+  at a time from there — the Exam Builder's picker only offers
+  "add the whole group" or the normal one-at-a-time flow for ungrouped
+  questions.
+- The original `teacher_subjects` gap noted above (teacher creation not
+  collecting which *classes* a subject is taught to) is still open —
+  unrelated to anything in this pass.
+- Vercel's GitHub auto-deploy integration has intermittently stopped
+  firing on push at least twice during this project (no error on either
+  side — GitHub just never notifies Vercel), requiring a manual
+  redeploy to recover each time. Worth a Vercel Support ticket if it
+  keeps recurring; nothing in this codebase can detect or fix that from
+  the outside.

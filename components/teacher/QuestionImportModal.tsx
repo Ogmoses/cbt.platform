@@ -19,9 +19,9 @@
  */
 
 import { useState } from "react";
-import { Upload, FileText, AlertTriangle, Image as ImageIcon, Trash2, Loader2, X, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, AlertTriangle, Image as ImageIcon, Trash2, Loader2, X, CheckCircle2, Check, Clock } from "lucide-react";
 import MathText from "@/components/common/MathText";
-import type { BankQuestion, ClassOption, QuestionOption, QuestionType, SubjectOption } from "./types";
+import type { BankQuestion, ClassOption, QuestionOption, QuestionType, SubjectOption, ImportBatch } from "./types";
 import { QUESTION_TYPE_LABEL } from "./types";
 
 interface DraftQuestion {
@@ -42,22 +42,32 @@ interface ReviewQuestion extends DraftQuestion {
 interface QuestionImportModalProps {
   subjects: SubjectOption[];
   classes: ClassOption[];
-  onCreate: (q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">) => Promise<void>;
+  onCreate: (q: Omit<BankQuestion, "id" | "updatedAt" | "subjectName" | "className">, opts?: { skipReload?: boolean }) => Promise<void>;
   onClose: () => void;
+  /** Persists the current review progress so closing before finishing doesn't lose it — see the "Reviewing" section in QuestionBankManager. */
+  onSaveForLater: (batch: { id?: string; subjectId: string; classId: string | null; sourceFilename: string | null; draftQuestions: unknown }) => Promise<void>;
+  /** When set, the modal opens directly into the review step with this batch's saved state instead of the upload step. */
+  resumeBatch?: ImportBatch;
+  /** Called once every question in a resumed batch has actually been saved, so the now-finished batch row can be deleted. */
+  onFinishedResume?: () => void;
 }
 
-export default function QuestionImportModal({ subjects, classes, onCreate, onClose }: QuestionImportModalProps) {
-  const [step, setStep] = useState<"upload" | "review">("upload");
-  const [subjectId, setSubjectId] = useState(subjects[0]?.id ?? "");
-  const [classId, setClassId] = useState(classes[0]?.id ?? "");
+export default function QuestionImportModal({ subjects, classes, onCreate, onClose, onSaveForLater, resumeBatch, onFinishedResume }: QuestionImportModalProps) {
+  const [step, setStep] = useState<"upload" | "review">(resumeBatch ? "review" : "upload");
+  const [subjectId, setSubjectId] = useState(resumeBatch?.subjectId ?? subjects[0]?.id ?? "");
+  const [classId, setClassId] = useState(resumeBatch?.classId ?? classes[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const [sourceFilename, setSourceFilename] = useState<string | null>(resumeBatch?.sourceFilename ?? null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [skippedLineCount, setSkippedLineCount] = useState(0);
-  const [questions, setQuestions] = useState<ReviewQuestion[]>([]);
+  const [questions, setQuestions] = useState<ReviewQuestion[]>(
+    resumeBatch && Array.isArray(resumeBatch.draftQuestions) ? (resumeBatch.draftQuestions as ReviewQuestion[]) : []
+  );
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingForLater, setSavingForLater] = useState(false);
 
   const handleParse = async () => {
     if (!file || !subjectId) return;
@@ -119,27 +129,61 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
     setSaving(true);
     setSaveError(null);
     setSaveProgress(0);
+
+    // Every question from this one import shares a single group id/label
+    // so they show up as one collapsible entry in the bank, and can be
+    // added to an exam as a whole — see QuestionBankManager and
+    // ExamBuilder's grouping.
+    const groupId = crypto.randomUUID();
+    const subjectName = subjects.find((s) => s.id === subjectId)?.name ?? "Imported";
+    const className = classes.find((c) => c.id === classId)?.name ?? "Unclassified";
+    const groupLabel = `${subjectName} — ${className}`;
+
+    let remaining = questions;
     try {
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
-        await onCreate({
-          subjectId,
-          classId: classId || null,
-          topic: q.topic ?? "",
-          type: q.type,
-          prompt: q.prompt,
-          points: q.points,
-          options: q.type === "multiple_choice" || q.type === "true_false" ? q.options : undefined,
-          referenceAnswer: q.type === "fill_blank" || q.type === "short_theory" ? q.referenceAnswer || null : undefined,
-        });
+        await onCreate(
+          {
+            subjectId,
+            classId: classId || null,
+            topic: q.topic ?? "",
+            type: q.type,
+            prompt: q.prompt,
+            points: q.points,
+            options: q.type === "multiple_choice" || q.type === "true_false" ? q.options : undefined,
+            referenceAnswer: q.type === "fill_blank" || q.type === "short_theory" ? q.referenceAnswer || null : undefined,
+            importGroupId: groupId,
+            importGroupLabel: groupLabel,
+          },
+          { skipReload: i < questions.length - 1 } // one real reload at the very end, not after every single insert
+        );
         setSaveProgress(i + 1);
+        remaining = questions.slice(i + 1);
       }
+      if (resumeBatch) onFinishedResume?.();
       onClose();
     } catch (err) {
+      // Only what's left unsaved stays in the review list — clicking
+      // "Save" again retries just the remainder instead of re-submitting
+      // (and duplicating) everything that already went through.
+      setQuestions(remaining);
       setSaveError(err instanceof Error ? err.message : "Something went wrong partway through saving. Questions already saved are kept — retry to continue with the rest.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleClose = async () => {
+    if (step === "review" && questions.length > 0) {
+      setSavingForLater(true);
+      try {
+        await onSaveForLater({ id: resumeBatch?.id, subjectId, classId: classId || null, sourceFilename, draftQuestions: questions });
+      } finally {
+        setSavingForLater(false);
+      }
+    }
+    onClose();
   };
 
   return (
@@ -149,10 +193,20 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
           <h2 className="font-display text-[15px] font-semibold text-ink dark:text-white">
             {step === "upload" ? "Import questions" : `Review ${questions.length} question${questions.length === 1 ? "" : "s"}`}
           </h2>
-          <button onClick={onClose} className="rounded-md p-1.5 text-ink/40 hover:bg-background-muted dark:text-white/40 dark:hover:bg-white/5">
-            <X size={18} />
+          <button
+            onClick={handleClose}
+            disabled={savingForLater}
+            aria-label={step === "review" && questions.length > 0 ? "Save for later and close" : "Close"}
+            className="rounded-md p-1.5 text-ink/40 hover:bg-background-muted dark:text-white/40 dark:hover:bg-white/5 disabled:opacity-60"
+          >
+            {savingForLater ? <Loader2 size={18} className="animate-spin" /> : <X size={18} />}
           </button>
         </div>
+        {step === "review" && questions.length > 0 && (
+          <p className="border-b border-black/5 bg-background-muted px-5 py-1.5 text-[11px] text-ink/45 dark:border-white/10 dark:bg-white/5 dark:text-white/45">
+            Closing now saves your progress — it'll show up under "Reviewing" in the question bank to pick back up later.
+          </p>
+        )}
 
         {step === "upload" ? (
           <div className="space-y-4 overflow-y-auto px-5 py-4">
@@ -192,7 +246,11 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
                 type="file"
                 accept=".docx,.csv"
                 className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const picked = e.target.files?.[0] ?? null;
+                  setFile(picked);
+                  setSourceFilename(picked?.name ?? null);
+                }}
               />
             </label>
 
@@ -282,11 +340,11 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
                             type="button"
                             onClick={() => markCorrect(i, opt.id)}
                             aria-label="Mark correct"
-                            className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 ${
-                              opt.isCorrect ? "border-crimson-600 bg-crimson-600" : "border-black/20 dark:border-white/25"
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                              opt.isCorrect ? "border-crimson-600 bg-crimson-600" : "border-black/25 dark:border-white/30 hover:border-crimson-400"
                             }`}
                           >
-                            {opt.isCorrect && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                            {opt.isCorrect && <Check size={16} strokeWidth={3.5} className="text-on-crimson" />}
                           </button>
                           <input
                             value={opt.text}

@@ -9,7 +9,7 @@
  */
 
 import { useRef, useState } from "react";
-import { Plus, Trash2, ImagePlus, X, Loader2 } from "lucide-react";
+import { Plus, Trash2, ImagePlus, X, Loader2, Check } from "lucide-react";
 import MathText from "@/components/common/MathText";
 import { splitMathSegments } from "@/lib/mathDetect";
 
@@ -296,11 +296,11 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
                         type="button"
                         onClick={() => markCorrect(opt.id)}
                         aria-label="Mark correct"
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                          opt.isCorrect ? "border-crimson-600 bg-crimson-600" : "border-black/20"
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                          opt.isCorrect ? "border-crimson-600 bg-crimson-600" : "border-black/25 dark:border-white/30 hover:border-crimson-400"
                         }`}
                       >
-                        {opt.isCorrect && <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-[#1A1C20]" />}
+                        {opt.isCorrect && <Check size={16} strokeWidth={3.5} className="text-on-crimson" />}
                       </button>
                       <input
                         value={opt.text}

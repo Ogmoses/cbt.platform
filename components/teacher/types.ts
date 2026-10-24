@@ -24,6 +24,22 @@ export interface BankQuestion {
   options?: QuestionOption[]; // multiple_choice / true_false
   referenceAnswer?: string | null; // fill_blank / short_theory marking guide
   updatedAt: string; // ISO
+  /** Set when this question came from a bulk import — every question from
+   *  the same import shares the same id, so they can be shown and picked
+   *  as one unit instead of N separate rows. See QuestionBankManager and
+   *  ExamBuilder's grouping logic. */
+  importGroupId?: string | null;
+  importGroupLabel?: string | null; // "Subject — Class", set once per group
+}
+
+/** A saved-in-progress bulk import review, resumable later — see QuestionImportModal. */
+export interface ImportBatch {
+  id: string;
+  subjectId: string;
+  classId: string | null;
+  sourceFilename: string | null;
+  draftQuestions: unknown; // ReviewQuestion[] from QuestionImportModal, stored as-is
+  updatedAt: string;
 }
 
 export interface SubjectOption {

@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   Users,
   Wand2,
+  FolderOpen,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { BankQuestion, ClassOption, StudentOption, SubjectOption, TermOption } from "./types";
@@ -126,7 +127,30 @@ export default function ExamBuilder({ subjects, classes, terms, questionBank, st
 
   const totalPoints = selectedQuestions.reduce((sum, q) => sum + q.points, 0);
 
+  /** Same single-unit grouping as QuestionBankManager — a bulk-imported
+   *  set of (often dozens of) questions shows as one row here too, so
+   *  adding them to an exam is one tap instead of N. Not clear this is
+   *  always the right call (an exam might only want a handful out of a
+   *  60-question import), but ticking 60 boxes individually is worse —
+   *  see availableUngroupedQuestions below for pulling a group apart if
+   *  that's what's actually needed. */
+  const availableRows = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: ({ kind: "single"; question: BankQuestion } | { kind: "group"; groupId: string; label: string; questions: BankQuestion[] })[] = [];
+    for (const q of availableQuestions) {
+      if (q.importGroupId) {
+        if (seen.has(q.importGroupId)) continue;
+        seen.add(q.importGroupId);
+        rows.push({ kind: "group", groupId: q.importGroupId, label: q.importGroupLabel || "Imported questions", questions: availableQuestions.filter((m) => m.importGroupId === q.importGroupId) });
+      } else {
+        rows.push({ kind: "single", question: q });
+      }
+    }
+    return rows;
+  }, [availableQuestions]);
+
   const addQuestion = (id: string) => update("questionIds", [...form.questionIds, id]);
+  const addQuestionGroup = (ids: string[]) => update("questionIds", [...form.questionIds, ...ids.filter((id) => !form.questionIds.includes(id))]);
   const removeQuestion = (id: string) => update("questionIds", form.questionIds.filter((qid) => qid !== id));
   const moveQuestion = (index: number, dir: -1 | 1) => {
     const next = [...form.questionIds];
@@ -295,21 +319,37 @@ export default function ExamBuilder({ subjects, classes, terms, questionBank, st
               />
             </div>
             <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-lg border border-black/5 dark:border-white/10 bg-background-muted dark:bg-white/5 p-2">
-              {availableQuestions.length === 0 ? (
+              {availableRows.length === 0 ? (
                 <p className="px-2 py-3 text-center text-[12px] text-ink/40 dark:text-white/40">
                   No questions tagged for this class and subject yet — add some from Question Bank, or check whether existing ones still need a class assigned.
                 </p>
               ) : (
-                availableQuestions.map((q) => (
-                  <button
-                    key={q.id}
-                    onClick={() => addQuestion(q.id)}
-                    className="flex w-full items-start justify-between gap-2 rounded-md bg-white dark:bg-[#1A1C20] px-3 py-2 text-left text-[12.5px] text-ink dark:text-white shadow-card transition-shadow duration-200 hover:shadow-card-hover"
-                  >
-                    <span className="line-clamp-2">{q.prompt}</span>
-                    <Plus size={14} className="mt-0.5 shrink-0 text-crimson-600" />
-                  </button>
-                ))
+                availableRows.map((row) =>
+                  row.kind === "group" ? (
+                    <button
+                      key={row.groupId}
+                      onClick={() => addQuestionGroup(row.questions.map((q) => q.id))}
+                      className="flex w-full items-center justify-between gap-2 rounded-md bg-white dark:bg-[#1A1C20] px-3 py-2 text-left text-[12.5px] text-ink dark:text-white shadow-card transition-shadow duration-200 hover:shadow-card-hover"
+                      title={`Adds all ${row.questions.length} questions from this import at once`}
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <FolderOpen size={14} className="shrink-0 text-crimson-600" />
+                        <span className="truncate">{row.label}</span>
+                        <span className="shrink-0 text-[11px] text-ink/40 dark:text-white/40">({row.questions.length})</span>
+                      </span>
+                      <Plus size={14} className="mt-0.5 shrink-0 text-crimson-600" />
+                    </button>
+                  ) : (
+                    <button
+                      key={row.question.id}
+                      onClick={() => addQuestion(row.question.id)}
+                      className="flex w-full items-start justify-between gap-2 rounded-md bg-white dark:bg-[#1A1C20] px-3 py-2 text-left text-[12.5px] text-ink dark:text-white shadow-card transition-shadow duration-200 hover:shadow-card-hover"
+                    >
+                      <span className="line-clamp-2">{row.question.prompt}</span>
+                      <Plus size={14} className="mt-0.5 shrink-0 text-crimson-600" />
+                    </button>
+                  )
+                )
               )}
             </div>
           </div>
