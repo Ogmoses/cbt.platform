@@ -7,7 +7,7 @@
  * class is just whichever one this exam belongs to.
  */
 
-import { X, CheckCircle2, Circle, Clock, AlertTriangle, ChevronRight } from "lucide-react";
+import { X, CheckCircle2, Circle, Clock, AlertTriangle, ChevronRight, Loader2 } from "lucide-react";
 
 export type RosterStatus = "not_started" | "active" | "submitted" | "expired" | "terminated";
 
@@ -27,6 +27,10 @@ interface ExamRosterProps {
   onClose: () => void;
   /** Only meaningful for "submitted" students — there's nothing to review before that. */
   onSelectStudent?: (studentId: string) => void;
+  /** Student whose review is currently loading — shows a spinner on that row and blocks other taps. */
+  loadingStudentId?: string | null;
+  /** Shown above the list if opening a student's review failed. */
+  errorMessage?: string | null;
 }
 
 const STATUS_META: Record<RosterStatus, { label: string; icon: React.ElementType; color: string }> = {
@@ -37,9 +41,12 @@ const STATUS_META: Record<RosterStatus, { label: string; icon: React.ElementType
   terminated: { label: "Terminated", icon: AlertTriangle, color: "text-crimson-600" },
 };
 
+/** Statuses that have an attempt worth reviewing (anything the student actually sat). */
+const REVIEWABLE: RosterStatus[] = ["submitted", "expired", "terminated"];
+
 const GROUP_ORDER: RosterStatus[] = ["submitted", "active", "not_started", "expired", "terminated"];
 
-export default function ExamRoster({ examTitle, className, students, onClose, onSelectStudent }: ExamRosterProps) {
+export default function ExamRoster({ examTitle, className, students, onClose, onSelectStudent, loadingStudentId, errorMessage }: ExamRosterProps) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-4">
       <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-lg bg-white dark:bg-[#1A1C20] shadow-card-hover">
@@ -54,6 +61,10 @@ export default function ExamRoster({ examTitle, className, students, onClose, on
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
+          {onSelectStudent && students.some((s) => REVIEWABLE.includes(s.status)) && (
+            <p className="mb-3 text-[12px] text-ink/50 dark:text-white/50">Tap a student to see which questions they got right and wrong.</p>
+          )}
+          {errorMessage && <p className="mb-3 rounded-md bg-crimson-50 px-3 py-2 text-[12.5px] text-crimson-700 dark:bg-crimson-600/15 dark:text-crimson-500">{errorMessage}</p>}
           {students.length === 0 ? (
             <p className="py-8 text-center text-[13px] text-ink/45 dark:text-white/45">No students found in this class yet.</p>
           ) : (
@@ -71,7 +82,7 @@ export default function ExamRoster({ examTitle, className, students, onClose, on
                     {group
                       .sort((a, b) => a.fullName.localeCompare(b.fullName))
                       .map((s) => {
-                        const clickable = status === "submitted" && onSelectStudent;
+                        const clickable = REVIEWABLE.includes(status) && !!onSelectStudent;
                         const Row = (
                           <>
                             <div>
@@ -82,7 +93,7 @@ export default function ExamRoster({ examTitle, className, students, onClose, on
                               {s.score !== null && s.maxScore !== null && (
                                 <span className="text-[12.5px] font-semibold tabular-nums text-ink/70 dark:text-white/70">{s.score}/{s.maxScore}</span>
                               )}
-                              {clickable && <ChevronRight size={14} className="text-ink/30 dark:text-white/30" />}
+                              {clickable && (loadingStudentId === s.id ? <Loader2 size={14} className="animate-spin text-crimson-600" /> : <ChevronRight size={14} className="text-ink/30 dark:text-white/30" />)}
                             </div>
                           </>
                         );
@@ -90,7 +101,8 @@ export default function ExamRoster({ examTitle, className, students, onClose, on
                           <button
                             key={s.id}
                             onClick={() => onSelectStudent!(s.id)}
-                            className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left hover:bg-background-muted dark:hover:bg-white/5"
+                            disabled={!!loadingStudentId}
+                            className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left hover:bg-background-muted disabled:opacity-60 dark:hover:bg-white/5"
                           >
                             {Row}
                           </button>

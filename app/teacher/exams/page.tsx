@@ -43,7 +43,8 @@ export default function MyExamsPage() {
     maxScore: number;
     questions: StudentReviewQuestion[];
   } | null>(null);
-  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewLoadingId, setReviewLoadingId] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const load = async () => {
     if (!authUser) return;
@@ -136,6 +137,7 @@ export default function MyExamsPage() {
       maxScore: resultByStudent.has(u.id) ? maxScore : null,
     }));
 
+    setReviewError(null);
     setViewingExam({ examId, title: exam.title, className: exam.className, students });
     setRosterLoading(false);
   };
@@ -149,7 +151,8 @@ export default function MyExamsPage() {
    */
   const handleSelectStudent = async (studentId: string) => {
     if (!viewingExam) return;
-    setReviewLoading(true);
+    setReviewLoadingId(studentId);
+    setReviewError(null);
 
     const student = viewingExam.students.find((s) => s.id === studentId);
 
@@ -159,7 +162,7 @@ export default function MyExamsPage() {
         .select("id")
         .eq("exam_id", viewingExam.examId)
         .eq("student_id", studentId)
-        .single(),
+        .maybeSingle(),
       supabase
         .from("exam_questions")
         .select("order_index, questions(id, type, prompt, points, reference_answer, question_options(id, option_text, is_correct, order_index))")
@@ -168,18 +171,25 @@ export default function MyExamsPage() {
     ]);
 
     if (!session) {
-      setReviewLoading(false);
+      setReviewError("Couldn't find that student's attempt.");
+      setReviewLoadingId(null);
       return;
     }
 
-    const { data: answerRows } = await supabase
+    const { data: answerRows, error: answersError } = await supabase
       .from("student_answers")
       .select("question_id, selected_option_id, free_text_answer, is_flagged, points_awarded")
       .eq("session_id", session.id);
 
+    if (answersError) {
+      setReviewError("Couldn't load that student's answers. Try again.");
+      setReviewLoadingId(null);
+      return;
+    }
+
     const answerByQuestion = new Map((answerRows ?? []).map((a: any) => [a.question_id, a]));
 
-    const questions: StudentReviewQuestion[] = (examQuestions ?? []).map((eq: any) => {
+    const questions: StudentReviewQuestion[] = (examQuestions ?? []).filter((eq: any) => eq.questions).map((eq: any) => {
       const q = eq.questions;
       const answer = answerByQuestion.get(q.id);
       return {
@@ -205,7 +215,7 @@ export default function MyExamsPage() {
       maxScore: student?.maxScore ?? 0,
       questions,
     });
-    setReviewLoading(false);
+    setReviewLoadingId(null);
   };
 
   return (
@@ -233,8 +243,13 @@ export default function MyExamsPage() {
           examTitle={viewingExam.title}
           className={viewingExam.className}
           students={viewingExam.students}
-          onClose={() => setViewingExam(null)}
+          onClose={() => {
+            setViewingExam(null);
+            setReviewError(null);
+          }}
           onSelectStudent={handleSelectStudent}
+          loadingStudentId={reviewLoadingId}
+          errorMessage={reviewError}
         />
       )}
 
