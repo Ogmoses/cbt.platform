@@ -10,21 +10,15 @@
  * — but react-pdf has its own StyleSheet API (no Tailwind classes here).
  */
 
-import { Document, Page, View, Text, Image, StyleSheet, Font } from "@react-pdf/renderer";
+import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import type { ReportCardData } from "./types";
 
-// Plus Jakarta Sans matches the rest of the platform's headings. React-pdf
-// needs font files registered explicitly — point these at wherever the
-// font is hosted/bundled in your project (e.g. /public/fonts/...).
-Font.register({
-  family: "Plus Jakarta Sans",
-  fonts: [
-    { src: "/fonts/PlusJakartaSans-Regular.ttf", fontWeight: 400 },
-    { src: "/fonts/PlusJakartaSans-SemiBold.ttf", fontWeight: 600 },
-    { src: "/fonts/PlusJakartaSans-Bold.ttf", fontWeight: 700 },
-  ],
-});
-
+// Uses react-pdf's built-in Helvetica: no font files to host, nothing to
+// register, so PDF generation can't fail on a missing font. fontWeight 600/700
+// below both resolve to Helvetica-Bold. Note: built-in fonts only cover
+// Latin-1 characters, so letters outside it (e.g. Yoruba "ẹ", "ọ", "ṣ") may
+// not draw correctly — if that matters, register a real .ttf that contains
+// them (Font.register needs a path the *server* can read, not a /public URL).
 const CRIMSON = "#AB1509";
 const CREAM = "#fff7d3";
 const INK = "#1A1A1A";
@@ -32,7 +26,7 @@ const MUTED = "#6B6B6B";
 const BORDER = "#E5E1D8";
 
 const styles = StyleSheet.create({
-  page: { padding: 36, fontFamily: "Plus Jakarta Sans", fontSize: 9.5, color: INK },
+  page: { padding: 36, fontFamily: "Helvetica", fontSize: 9.5, color: INK },
 
   header: { flexDirection: "row", alignItems: "center", borderBottomWidth: 2, borderBottomColor: CRIMSON, paddingBottom: 12, marginBottom: 14 },
   logo: { width: 44, height: 44, marginRight: 12, objectFit: "contain" },

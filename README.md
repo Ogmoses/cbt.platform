@@ -65,8 +65,6 @@ Teacher portal is now complete end to end.
   People screen has a per-teacher subject-and-class assignment editor.
 - ~~Logo / question image uploads saved as `data:` URLs~~ — resolved in
   Pass 8 (Supabase Storage).
-- Report card PDFs need the three Plus Jakarta Sans `.ttf` files added
-  manually (see `public/fonts/README.md`) — not yet done as of this build.
 - Supabase's **Leaked Password Protection** (checks new passwords against
   HaveIBeenPwned) is off by default and isn't something the project-level
   connector can toggle — Dashboard → Authentication → Policies to enable it.
@@ -536,8 +534,7 @@ section for what's genuinely tested vs. best-effort.
   failed as duplicates).
 
 ### Still open
-- Report card fonts (the three Plus Jakarta Sans `.ttf` files in
-  `public/fonts/`) must be added by hand — see `public/fonts/README.md`.
-  Report-card PDFs throw without them.
+- ~~Report card fonts~~ — resolved: PDFs use built-in Helvetica, no files
+  needed (Latin-1 characters only; see `public/fonts/README.md`).
 - Leaked Password Protection (Supabase dashboard) and the Vercel auto-deploy
   ticket remain manual.
