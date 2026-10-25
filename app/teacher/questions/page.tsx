@@ -180,7 +180,7 @@ export default function TeacherQuestionsPage() {
         created_by: authUser.id,
         type: q.type,
         prompt: q.prompt,
-        image_url: q.imageUrl ?? null, // TODO: upload to Supabase Storage instead of a data: URL
+        image_url: q.imageUrl ?? null,
         points: q.points,
         reference_answer: q.referenceAnswer ?? null,
         import_group_id: q.importGroupId ?? null,

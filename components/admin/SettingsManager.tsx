@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { Plus, Trash2, Loader2, ImagePlus, X, Save, Check } from "lucide-react";
 import type { GradeBand, SchoolProfile } from "./types";
+import { uploadImage } from "@/lib/uploadImage";
 import { RECOMMENDED_COLORS, DEFAULT_THEME_COLOR, themeCssVars, buildRampFromHex, getOnAccentColor } from "@/lib/themes";
 
 interface SettingsManagerProps {
@@ -139,14 +140,22 @@ function ProfileSection({ profile, onSave }: { profile: SchoolProfile; onSave: (
   const [logoUrl, setLogoUrl] = useState<string | null>(profile.logoUrl ?? null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
 
-  const handleLogo = (file: File | null) => {
+  const handleLogo = async (file: File | null) => {
     if (!file) return;
-    // TODO: upload to Supabase Storage and store the returned public URL —
-    // this data URL is only for local preview.
-    const reader = new FileReader();
-    reader.onload = () => setLogoUrl(reader.result as string);
-    reader.readAsDataURL(file);
+    setLogoError(null);
+    setUploadingLogo(true);
+    try {
+      // Uploaded to Supabase Storage now; it only becomes the school's
+      // logo once "Save" is pressed, same as every other field here.
+      setLogoUrl(await uploadImage("school-assets", file));
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : "Couldn't upload that logo.");
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const handleSave = async () => {
@@ -173,9 +182,18 @@ function ProfileSection({ profile, onSave }: { profile: SchoolProfile; onSave: (
           </div>
         ) : (
           <label className="flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-black/15 text-ink/40 dark:text-white/40 hover:border-black/25">
-            <ImagePlus size={17} />
-            <span className="text-[9px] font-medium">Logo</span>
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleLogo(e.target.files?.[0] ?? null)} />
+            {uploadingLogo ? <Loader2 size={17} className="animate-spin" /> : <ImagePlus size={17} />}
+            <span className="text-[9px] font-medium">{uploadingLogo ? "Uploading" : "Logo"}</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              disabled={uploadingLogo}
+              className="hidden"
+              onChange={(e) => {
+                handleLogo(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
           </label>
         )}
         <div className="flex-1 space-y-3">
@@ -183,6 +201,7 @@ function ProfileSection({ profile, onSave }: { profile: SchoolProfile; onSave: (
           <TextField label="Motto (optional)" value={motto} onChange={setMotto} placeholder="e.g. Knowledge, Character, Excellence" />
         </div>
       </div>
+      {logoError && <p className="mt-2 text-[12px] text-crimson-600">{logoError}</p>}
       <label className="mt-3.5 block">
         <span className="mb-1 block text-[12px] font-medium text-ink/60 dark:text-white/60">Address</span>
         <textarea

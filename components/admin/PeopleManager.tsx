@@ -8,7 +8,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Upload, Pencil, Trash2, Search, Ban, CheckCircle, KeyRound, Mail, Send } from "lucide-react";
 import PersonEditor from "./PersonEditor";
-import BulkImportModal, { type ImportRow } from "./BulkImportModal";
+import BulkImportModal, { type ImportRow, type BulkImportOutcome } from "./BulkImportModal";
 import type { PersonRole, PersonRow } from "./types";
 
 interface PeopleManagerProps {
@@ -21,7 +21,7 @@ interface PeopleManagerProps {
   onToggleActive: (role: PersonRole, id: string, isActive: boolean) => Promise<void>;
   onDelete: (role: PersonRole, id: string) => Promise<void>;
   onResendAccess: (email: string) => Promise<void>;
-  onBulkImport: (role: PersonRole, rows: ImportRow[]) => Promise<void>;
+  onBulkImport: (role: PersonRole, rows: ImportRow[]) => Promise<BulkImportOutcome | void>;
 }
 
 export default function PeopleManager({

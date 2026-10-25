@@ -61,14 +61,10 @@ Teacher portal is now complete end to end.
 | Student exam page wired to the above (device fingerprint, loading/error states) | `app/student/exam/[examId]/page.tsx` |
 
 ## Still to build
-- **Known gap**: creating a teacher doesn't populate `teacher_subjects` —
-  that table needs a (teacher, subject, **class**) triple, and the People
-  form only collects subjects, not which classes they're taught to. Needs
-  its own assignment screen; for now the field is accepted in the UI but
-  not persisted.
-- Settings' logo upload still saves a `data:` URL straight into
-  `school_profile.logo_url` rather than uploading to Supabase Storage first
-  — fine for a demo, wasteful for production.
+- ~~Teacher creation not populating `teacher_subjects`~~ — resolved: the
+  People screen has a per-teacher subject-and-class assignment editor.
+- ~~Logo / question image uploads saved as `data:` URLs~~ — resolved in
+  Pass 8 (Supabase Storage).
 - Report card PDFs need the three Plus Jakarta Sans `.ttf` files added
   manually (see `public/fonts/README.md`) — not yet done as of this build.
 - Supabase's **Leaked Password Protection** (checks new passwords against
@@ -506,3 +502,42 @@ section for what's genuinely tested vs. best-effort.
   redeploy to recover each time. Worth a Vercel Support ticket if it
   keeps recurring; nothing in this codebase can detect or fix that from
   the outside.
+
+## Pass 8: picking single questions from an import group, Storage uploads, bulk-import reporting, teacher-owned questions
+
+- **Import review screen**: "Add question" (header + bottom of list) for
+  questions not in the original file; switching a question to multiple
+  choice now shows blank option fields, with a new one appearing as each
+  last field is filled (same behaviour as the single-question form). Blank
+  options are dropped on save; multiple choice needs 2+ filled options and a
+  correct one.
+- **Teacher isolation**: verified live RLS on `questions`, `question_options`
+  and `question_import_batches` was already owner-only, with no cross-teacher
+  data. `database/migrations/009_exam_questions_ownership_check.sql` closes
+  the one gap found — a teacher could attach someone else's question to
+  their own exam through the API.
+- **Exam Builder**: import groups now expand to pick individual questions
+  ("Add all" still adds the whole group). This also fixes a bug where
+  `lib/useTeacherExamFormData.ts` never fetched `import_group_id`/`label`,
+  so groups never actually appeared in the Exam Builder.
+- **Supabase Storage** (`database/migrations/010_storage_buckets.sql`):
+  `question-images` (teachers write only inside their own `<user id>/`
+  folder, 5 MB) and `school-assets` (admin-only, 2 MB, PNG/JPEG only because
+  the report-card PDF renderer can't draw SVG/WebP). Both public-read.
+  `lib/uploadImage.ts` validates, downsizes large phone photos, uploads, and
+  returns the public URL. Images are uploaded when picked, so a picture
+  chosen and then abandoned leaves an orphaned file — harmless, tiny.
+- **Report cards now actually use the Settings school profile** (name,
+  motto, address, logo). `lib/reportCard.ts` previously used a hardcoded
+  stand-in and ignored `school_profile` entirely.
+- **People bulk import**: failed rows are listed by name/ID with a plain
+  reason, and "Retry failed" resends only those — rows that went through are
+  never resent (previously a retry resubmitted everything and the successes
+  failed as duplicates).
+
+### Still open
+- Report card fonts (the three Plus Jakarta Sans `.ttf` files in
+  `public/fonts/`) must be added by hand — see `public/fonts/README.md`.
+  Report-card PDFs throw without them.
+- Leaked Password Protection (Supabase dashboard) and the Vercel auto-deploy
+  ticket remain manual.

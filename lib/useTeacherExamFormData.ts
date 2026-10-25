@@ -21,7 +21,7 @@ export function useTeacherExamFormData(authUserId: string | undefined) {
         supabase.from("terms").select("id, name").order("is_current", { ascending: false }),
         supabase
           .from("questions")
-          .select("id, subject_id, class_id, topic, type, prompt, points, reference_answer, subjects(name)")
+          .select("id, subject_id, class_id, topic, type, prompt, points, reference_answer, import_group_id, import_group_label, subjects(name)")
           .eq("created_by", authUserId),
       ]);
 
@@ -77,6 +77,8 @@ export function useTeacherExamFormData(authUserId: string | undefined) {
           prompt: q.prompt,
           points: q.points,
           referenceAnswer: q.reference_answer,
+          importGroupId: q.import_group_id,
+          importGroupLabel: q.import_group_label,
           updatedAt: new Date().toISOString(),
         }))
       );

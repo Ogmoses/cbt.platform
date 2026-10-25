@@ -25,6 +25,7 @@ import {
   Users,
   Wand2,
   FolderOpen,
+  ChevronRight,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { BankQuestion, ClassOption, StudentOption, SubjectOption, TermOption } from "./types";
@@ -105,6 +106,15 @@ export default function ExamBuilder({ subjects, classes, terms, questionBank, st
   const [saving, setSaving] = useState<"draft" | "publish" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPublishedToast, setShowPublishedToast] = useState(false);
+  // Import groups the teacher has opened to pick individual questions from.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (groupId: string) =>
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
 
   const update = <K extends keyof ExamFormData>(key: K, value: ExamFormData[K]) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -326,19 +336,48 @@ export default function ExamBuilder({ subjects, classes, terms, questionBank, st
               ) : (
                 availableRows.map((row) =>
                   row.kind === "group" ? (
-                    <button
-                      key={row.groupId}
-                      onClick={() => addQuestionGroup(row.questions.map((q) => q.id))}
-                      className="flex w-full items-center justify-between gap-2 rounded-md bg-white dark:bg-[#1A1C20] px-3 py-2 text-left text-[12.5px] text-ink dark:text-white shadow-card transition-shadow duration-200 hover:shadow-card-hover"
-                      title={`Adds all ${row.questions.length} questions from this import at once`}
-                    >
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <FolderOpen size={14} className="shrink-0 text-crimson-600" />
-                        <span className="truncate">{row.label}</span>
-                        <span className="shrink-0 text-[11px] text-ink/40 dark:text-white/40">({row.questions.length})</span>
-                      </span>
-                      <Plus size={14} className="mt-0.5 shrink-0 text-crimson-600" />
-                    </button>
+                    <div key={row.groupId} className="overflow-hidden rounded-md bg-white shadow-card dark:bg-[#1A1C20]">
+                      <div className="flex items-stretch">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(row.groupId)}
+                          aria-expanded={expandedGroups.has(row.groupId)}
+                          title="Show the individual questions to pick from"
+                          className="flex min-w-0 flex-1 items-center gap-1.5 px-3 py-2.5 text-left text-[12.5px] text-ink dark:text-white"
+                        >
+                          <ChevronRight size={14} className={`shrink-0 text-ink/40 transition-transform duration-200 dark:text-white/40 ${expandedGroups.has(row.groupId) ? "rotate-90" : ""}`} />
+                          <FolderOpen size={14} className="shrink-0 text-crimson-600" />
+                          <span className="truncate">{row.label}</span>
+                          <span className="shrink-0 text-[11px] text-ink/40 dark:text-white/40">({row.questions.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addQuestionGroup(row.questions.map((q) => q.id))}
+                          title={`Adds all ${row.questions.length} questions at once`}
+                          className="flex shrink-0 items-center gap-1 border-l border-black/5 px-3 text-[11.5px] font-medium text-crimson-600 hover:bg-crimson-50 dark:border-white/10 dark:hover:bg-crimson-600/15"
+                        >
+                          <Plus size={13} /> Add all
+                        </button>
+                      </div>
+                      {expandedGroups.has(row.groupId) && (
+                        <div className="space-y-1 border-t border-black/5 bg-background-muted/60 p-1.5 dark:border-white/10 dark:bg-white/5">
+                          {row.questions.map((q, qi) => (
+                            <button
+                              type="button"
+                              key={q.id}
+                              onClick={() => addQuestion(q.id)}
+                              className="flex w-full items-start justify-between gap-2 rounded-md bg-white px-2.5 py-2 text-left text-[12px] text-ink shadow-card transition-shadow duration-200 hover:shadow-card-hover dark:bg-[#1A1C20] dark:text-white"
+                            >
+                              <span className="flex min-w-0 gap-1.5">
+                                <span className="shrink-0 text-ink/35 dark:text-white/35">{qi + 1}.</span>
+                                <span className="line-clamp-2">{q.prompt}</span>
+                              </span>
+                              <Plus size={14} className="mt-0.5 shrink-0 text-crimson-600" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <button
                       key={row.question.id}

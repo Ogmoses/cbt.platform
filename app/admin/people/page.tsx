@@ -132,12 +132,9 @@ export default function AdminPeoplePage() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "The import failed.");
     await loadAll();
-    if (data.failureCount > 0) {
-      // TODO: surface which specific rows failed (data.results) in the UI
-      // instead of one summary line — BulkImportModal's contract only takes
-      // a thrown Error today.
-      throw new Error(`Imported ${data.successCount} of ${rows.length}. ${data.failureCount} failed — likely a duplicate ${role === "student" ? "student ID" : "email"}.`);
-    }
+    // Per-row results (same order as `rows`) go back to BulkImportModal,
+    // which lists exactly which rows failed and why, and retries only those.
+    return { results: data.results as { ok: boolean; error?: string }[] };
   };
 
   return (

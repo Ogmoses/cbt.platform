@@ -12,6 +12,7 @@ import { useRef, useState } from "react";
 import { Plus, Trash2, ImagePlus, X, Loader2, Check } from "lucide-react";
 import MathText from "@/components/common/MathText";
 import { splitMathSegments } from "@/lib/mathDetect";
+import { uploadImage } from "@/lib/uploadImage";
 
 /** Whether any part of the text actually contains a detected formula — used to decide whether a live preview is worth showing at all. */
 function hasMath(text: string): boolean {
@@ -59,6 +60,8 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const handleTypeChange = (next: QuestionType) => {
@@ -70,13 +73,18 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
     }
   };
 
-  const handleImageChange = (file: File | null) => {
+  const handleImageChange = async (file: File | null) => {
     if (!file) return;
-    // TODO: upload to Supabase Storage and store the returned public URL
-    // instead of a data URL, which is only for local preview.
-    const reader = new FileReader();
-    reader.onload = () => setImageUrl(reader.result as string);
-    reader.readAsDataURL(file);
+    setImageError(null);
+    setUploadingImage(true);
+    try {
+      // Stored in Supabase Storage; only the public URL goes in the database.
+      setImageUrl(await uploadImage("question-images", file));
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "Couldn't upload that image.");
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const MAX_AUTO_OPTIONS = 8; // sane ceiling so this can't run away indefinitely
@@ -278,11 +286,21 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
               </div>
             ) : (
               <label className="flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-dashed border-black/15 px-3.5 py-2.5 text-[12.5px] font-medium text-ink/50 dark:text-white/50 hover:border-black/25 hover:text-ink/70 dark:hover:text-white/70">
-                <ImagePlus size={15} />
-                Upload image
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e.target.files?.[0] ?? null)} />
+                {uploadingImage ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
+                {uploadingImage ? "Uploading…" : "Upload image"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  disabled={uploadingImage}
+                  className="hidden"
+                  onChange={(e) => {
+                    handleImageChange(e.target.files?.[0] ?? null);
+                    e.target.value = ""; // allows re-picking the same file after an error
+                  }}
+                />
               </label>
             )}
+            {imageError && <p className="mt-1.5 text-[12px] text-crimson-600">{imageError}</p>}
           </div>
 
           {(type === "multiple_choice" || type === "true_false") && (

@@ -3,9 +3,8 @@ import { computeGradeLetter, computeTermSubjectRollup, type WeightedExamScore } 
 import type { ReportCardData, ReportCardSubjectRow } from "@/components/reports/types";
 
 /**
- * TODO: there's no `school_profile` table yet (see database/schema.sql
- * notes) — swap this for a real fetch once one exists. Until then this is
- * the one hardcoded piece of an otherwise fully data-driven report card.
+ * Used only if the `school_profile` row is missing or a field is blank —
+ * the real values come from the Settings screen (see buildReportCardData).
  */
 const SCHOOL_PROFILE_FALLBACK = {
   schoolName: "Soaring Fountain Group of Schools",
@@ -103,6 +102,16 @@ export async function buildReportCardData(
   const { data: term } = await supabase.from("terms").select("name, academic_session_id").eq("id", termId).single();
   const { data: session } = term ? await supabase.from("academic_sessions").select("name").eq("id", term.academic_session_id).single() : { data: null };
 
+  // Name, motto, address and logo come from Settings (school_profile is
+  // publicly readable, so this works with any client).
+  const { data: profile } = await supabase.from("school_profile").select("school_name, motto, address, logo_url").maybeSingle();
+  const schoolProfile = {
+    schoolName: profile?.school_name?.trim() || SCHOOL_PROFILE_FALLBACK.schoolName,
+    schoolMotto: profile?.motto?.trim() || SCHOOL_PROFILE_FALLBACK.schoolMotto,
+    schoolAddress: profile?.address?.trim() || SCHOOL_PROFILE_FALLBACK.schoolAddress,
+    logoUrl: profile?.logo_url || SCHOOL_PROFILE_FALLBACK.logoUrl,
+  };
+
   const { data: scaleRows } = await supabase.from("grading_scale").select("min_score, max_score, grade_letter, remark");
   const scale = (scaleRows ?? []).map((r) => ({ minScore: r.min_score, maxScore: r.max_score, gradeLetter: r.grade_letter }));
   const remarkByGrade = new Map((scaleRows ?? []).map((r) => [r.grade_letter, r.remark as string | null]));
@@ -118,7 +127,7 @@ export async function buildReportCardData(
   const positionInClass = ranked.findIndex(([id]) => id === studentId) + 1;
 
   return {
-    ...SCHOOL_PROFILE_FALLBACK,
+    ...schoolProfile,
     studentName: student.full_name,
     admissionNumber: student.admission_number ?? "",
     className: klass?.name ?? "",
