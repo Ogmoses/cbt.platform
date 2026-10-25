@@ -18,8 +18,8 @@
  *     RLS-governed insert path as any other.
  */
 
-import { useState } from "react";
-import { Upload, FileText, AlertTriangle, Image as ImageIcon, Trash2, Loader2, X, CheckCircle2, Check, Clock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Upload, FileText, AlertTriangle, Image as ImageIcon, Trash2, Loader2, X, CheckCircle2, Check, Plus } from "lucide-react";
 import MathText from "@/components/common/MathText";
 import type { BankQuestion, ClassOption, QuestionOption, QuestionType, SubjectOption, ImportBatch } from "./types";
 import { QUESTION_TYPE_LABEL } from "./types";
@@ -37,6 +37,42 @@ interface DraftQuestion {
 interface ReviewQuestion extends DraftQuestion {
   options: QuestionOption[];
   referenceAnswer: string;
+}
+
+const MAX_AUTO_OPTIONS = 8; // same ceiling QuestionEditor uses
+
+function newOption(text = ""): QuestionOption {
+  return { id: crypto.randomUUID(), text, isCorrect: false };
+}
+
+function trueFalseOptions(): QuestionOption[] {
+  return [newOption("True"), newOption("False")];
+}
+
+/**
+ * Makes sure a multiple-choice question always has at least two option
+ * fields and ends with one empty field ready to type into — the same
+ * "next field appears once the last one is filled" behaviour as
+ * QuestionEditor. Empty fields are dropped again on save.
+ */
+function withTrailingBlank(options: QuestionOption[]): QuestionOption[] {
+  const next = [...options];
+  while (next.length < 2) next.push(newOption());
+  const last = next[next.length - 1];
+  if (last.text.trim().length > 0 && next.length < MAX_AUTO_OPTIONS) next.push(newOption());
+  return next;
+}
+
+function blankReviewQuestion(): ReviewQuestion {
+  return {
+    type: "multiple_choice",
+    prompt: "",
+    options: withTrailingBlank([]),
+    points: 1,
+    topic: "",
+    hadDiagram: false,
+    referenceAnswer: "",
+  };
 }
 
 interface QuestionImportModalProps {
@@ -62,8 +98,23 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
   const [parseError, setParseError] = useState<string | null>(null);
   const [skippedLineCount, setSkippedLineCount] = useState(0);
   const [questions, setQuestions] = useState<ReviewQuestion[]>(
-    resumeBatch && Array.isArray(resumeBatch.draftQuestions) ? (resumeBatch.draftQuestions as ReviewQuestion[]) : []
+    resumeBatch && Array.isArray(resumeBatch.draftQuestions)
+      ? (resumeBatch.draftQuestions as ReviewQuestion[]).map((q) => ({
+          ...q,
+          options: q.type === "multiple_choice" ? withTrailingBlank(q.options ?? []) : q.options ?? [],
+          referenceAnswer: q.referenceAnswer ?? "",
+        }))
+      : []
   );
+  const listEndRef = useRef<HTMLDivElement>(null);
+  const [justAdded, setJustAdded] = useState(false);
+
+  useEffect(() => {
+    if (justAdded) {
+      listEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      setJustAdded(false);
+    }
+  }, [justAdded]);
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -82,7 +133,9 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
 
       const drafts: ReviewQuestion[] = (data.questions as DraftQuestion[]).map((d) => ({
         ...d,
-        options: d.options.map((o) => ({ id: crypto.randomUUID(), text: o.text, isCorrect: false })),
+        options: d.type === "multiple_choice"
+          ? withTrailingBlank(d.options.map((o) => newOption(o.text)))
+          : d.options.map((o) => newOption(o.text)),
         referenceAnswer: "",
       }));
       if (drafts.length === 0) {
@@ -105,8 +158,52 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
 
   const updateOption = (qIndex: number, optId: string, patch: Partial<QuestionOption>) => {
     setQuestions((prev) =>
-      prev.map((q, i) => (i === qIndex ? { ...q, options: q.options.map((o) => (o.id === optId ? { ...o, ...patch } : o)) } : q))
+      prev.map((q, i) => {
+        if (i !== qIndex) return q;
+        const next = q.options.map((o) => (o.id === optId ? { ...o, ...patch } : o));
+        // Typing into the current last field opens a fresh empty one,
+        // exactly like the single-question form.
+        const last = next[next.length - 1];
+        if (q.type === "multiple_choice" && next.length < MAX_AUTO_OPTIONS && last?.id === optId && last.text.trim().length > 0) {
+          return { ...q, options: [...next, newOption()] };
+        }
+        return { ...q, options: next };
+      })
     );
+  };
+
+  const removeOption = (qIndex: number, optId: string) => {
+    setQuestions((prev) =>
+      prev.map((q, i) => (i === qIndex ? { ...q, options: withTrailingBlank(q.options.filter((o) => o.id !== optId)) } : q))
+    );
+  };
+
+  /**
+   * Switching type reshapes the options so the card is immediately usable:
+   *  - to multiple choice from short theory / fill-in / true-false: blank
+   *    option fields appear (existing real options from the file are kept)
+   *  - to true/false: fixed True / False options
+   *  - to a written-answer type: options are left alone in state but are
+   *    never saved.
+   */
+  const changeType = (index: number, nextType: QuestionType) => {
+    setQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== index || q.type === nextType) return q;
+        if (nextType === "true_false") return { ...q, type: nextType, options: trueFalseOptions() };
+        if (nextType === "multiple_choice") {
+          const keep = q.type === "true_false" ? [] : q.options.filter((o) => o.text.trim());
+          // keep the correct-answer mark only if its option survived
+          return { ...q, type: nextType, options: withTrailingBlank(keep) };
+        }
+        return { ...q, type: nextType };
+      })
+    );
+  };
+
+  const addQuestion = () => {
+    setQuestions((prev) => [...prev, blankReviewQuestion()]);
+    setJustAdded(true);
   };
 
   const markCorrect = (qIndex: number, optId: string) => {
@@ -119,10 +216,16 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
     setQuestions((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const needsCorrectAnswer = (q: ReviewQuestion) =>
-    (q.type === "multiple_choice" || q.type === "true_false") && !q.options.some((o) => o.isCorrect);
+  const hasOptions = (q: ReviewQuestion) => q.type === "multiple_choice" || q.type === "true_false";
 
-  const invalidCount = questions.filter((q) => !q.prompt.trim() || needsCorrectAnswer(q)).length;
+  const needsCorrectAnswer = (q: ReviewQuestion) =>
+    hasOptions(q) && !q.options.some((o) => o.isCorrect && o.text.trim());
+
+  const needsMoreOptions = (q: ReviewQuestion) => q.type === "multiple_choice" && q.options.filter((o) => o.text.trim()).length < 2;
+
+  const isInvalid = (q: ReviewQuestion) => !q.prompt.trim() || needsCorrectAnswer(q) || needsMoreOptions(q);
+
+  const invalidCount = questions.filter(isInvalid).length;
 
   const handleSaveAll = async () => {
     if (invalidCount > 0 || questions.length === 0) return;
@@ -151,7 +254,7 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
             type: q.type,
             prompt: q.prompt,
             points: q.points,
-            options: q.type === "multiple_choice" || q.type === "true_false" ? q.options : undefined,
+            options: hasOptions(q) ? q.options.filter((o) => o.text.trim()) : undefined,
             referenceAnswer: q.type === "fill_blank" || q.type === "short_theory" ? q.referenceAnswer || null : undefined,
             importGroupId: groupId,
             importGroupLabel: groupLabel,
@@ -193,6 +296,15 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
           <h2 className="font-display text-[15px] font-semibold text-ink dark:text-white">
             {step === "upload" ? "Import questions" : `Review ${questions.length} question${questions.length === 1 ? "" : "s"}`}
           </h2>
+          {step === "review" && (
+            <button
+              type="button"
+              onClick={addQuestion}
+              className="ml-auto mr-2 flex items-center gap-1 rounded-md bg-background-muted px-2.5 py-1.5 text-[12px] font-medium text-ink/70 hover:text-crimson-600 dark:bg-white/5 dark:text-white/70"
+            >
+              <Plus size={13} /> Add question
+            </button>
+          )}
           <button
             onClick={handleClose}
             disabled={savingForLater}
@@ -296,7 +408,7 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
                 <div
                   key={i}
                   className={`rounded-lg border p-3.5 ${
-                    !q.prompt.trim() || needsCorrectAnswer(q) ? "border-crimson-300 bg-crimson-50/30 dark:border-crimson-600/40 dark:bg-crimson-600/5" : "border-black/10 dark:border-white/15"
+                    isInvalid(q) ? "border-crimson-300 bg-crimson-50/30 dark:border-crimson-600/40 dark:bg-crimson-600/5" : "border-black/10 dark:border-white/15"
                   }`}
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -304,7 +416,7 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
                       <span className="text-[11px] font-medium uppercase tracking-wide text-ink/40 dark:text-white/40">Q{i + 1}</span>
                       <select
                         value={q.type}
-                        onChange={(e) => updateQuestion(i, { type: e.target.value as QuestionType })}
+                        onChange={(e) => changeType(i, e.target.value as QuestionType)}
                         className="rounded-md border border-black/10 bg-white px-2 py-1 text-[11.5px] dark:border-white/15 dark:bg-white/5 dark:text-white"
                       >
                         {(Object.keys(QUESTION_TYPE_LABEL) as QuestionType[]).map((t) => (
@@ -350,11 +462,18 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
                             value={opt.text}
                             onChange={(e) => updateOption(i, opt.id, { text: e.target.value })}
                             disabled={q.type === "true_false"}
+                            placeholder={q.type === "multiple_choice" ? `Option ${String.fromCharCode(65 + q.options.indexOf(opt))}` : undefined}
                             className="flex-1 rounded-md border border-black/10 px-2.5 py-1.5 text-[12.5px] outline-none focus:border-crimson-500 disabled:bg-background-muted dark:border-white/15 dark:bg-white/5 dark:text-white dark:disabled:bg-white/10"
                           />
+                          {q.type === "multiple_choice" && q.options.length > 2 && (
+                            <button type="button" onClick={() => removeOption(i, opt.id)} aria-label="Remove option" className="text-ink/30 hover:text-crimson-600 dark:text-white/30">
+                              <X size={14} />
+                            </button>
+                          )}
                         </div>
                       ))}
-                      {needsCorrectAnswer(q) && <p className="text-[11px] text-crimson-600">Tap the circle next to the correct option.</p>}
+                      {needsMoreOptions(q) && <p className="text-[11px] text-crimson-600">Add at least two options.</p>}
+                      {!needsMoreOptions(q) && needsCorrectAnswer(q) && <p className="text-[11px] text-crimson-600">Tap the circle next to the correct option.</p>}
                     </div>
                   ) : (
                     <label className="block">
@@ -373,6 +492,15 @@ export default function QuestionImportModal({ subjects, classes, onCreate, onClo
               ))}
 
               {questions.length === 0 && <p className="py-8 text-center text-[13px] text-ink/45 dark:text-white/45">Every question was discarded.</p>}
+
+              <button
+                type="button"
+                onClick={addQuestion}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-black/20 py-2.5 text-[12.5px] font-medium text-ink/60 transition-colors hover:border-crimson-400 hover:text-crimson-600 dark:border-white/20 dark:text-white/60"
+              >
+                <Plus size={14} /> Add question
+              </button>
+              <div ref={listEndRef} />
             </div>
 
             <div className="border-t border-black/5 px-5 py-3.5 dark:border-white/10">

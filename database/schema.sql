@@ -568,9 +568,17 @@ create policy admin_write_grading_scale on grading_scale for all using (current_
 -- exam_questions: teachers/admins manage their own exams; students can see
 -- which questions belong to an exam only once they have a session for it.
 create policy exam_questions_manage on exam_questions
-  for all using (
+  for all
+  using (
     current_role_is('super_admin')
     or exists (select 1 from exams where exams.id = exam_questions.exam_id and exams.created_by = auth.uid())
+  )
+  with check (
+    current_role_is('super_admin')
+    or (
+      exists (select 1 from exams where exams.id = exam_questions.exam_id and exams.created_by = auth.uid())
+      and exists (select 1 from questions q where q.id = exam_questions.question_id and q.created_by = auth.uid())
+    )
   );
 
 create policy exam_questions_student_read on exam_questions
