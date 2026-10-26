@@ -13,7 +13,9 @@ import { inviteEmailHtml } from "@/lib/emailTemplates";
  *
  *   POST  — add a school by hand: creates it already ACTIVE (which also gives
  *           it the default grading scale, see migration 014) and invites its
- *           first admin by email.
+ *           first admin by email. If the email can't be sent (provider quota,
+ *           outage), the school and admin are STILL created and the invite
+ *           link is returned so the owner can send it another way.
  *   PATCH — { id, action }: "approve" (pending -> active, optionally fixing
  *           the code first), "suspend" (active -> suspended),
  *           "reactivate" (suspended -> active).
@@ -98,20 +100,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: profileError.message }, { status: 500 });
   }
 
+  // Without an invite token there's no way for the admin to get in, so that failure still undoes everything.
+  let inviteLink: string;
+  let expiresInHours: number;
   try {
-    const { token, expiresInHours } = await issueAccessToken(admin, { userId: created.user.id, purpose: "invite" });
-    const link = `${req.nextUrl.origin}/set-password?token=${token}`;
+    const issued = await issueAccessToken(admin, { userId: created.user.id, purpose: "invite" });
+    inviteLink = `${req.nextUrl.origin}/set-password?token=${issued.token}`;
+    expiresInHours = issued.expiresInHours;
+  } catch (err) {
+    await undo(created.user.id);
+    return NextResponse.json({ error: `Couldn't create the admin's invite. (${err instanceof Error ? err.message : "error"})` }, { status: 500 });
+  }
+
+  // A failed email does NOT undo the school: the owner gets the link to send by hand.
+  let emailSent = false;
+  let emailError: string | null = null;
+  try {
     await sendMail({
       to: adminEmail,
       subject: `Set up your account at ${school.name}`,
-      html: inviteEmailHtml({ schoolName: school.name, fullName: adminName, link, expiresInHours }),
+      html: inviteEmailHtml({ schoolName: school.name, fullName: adminName, link: inviteLink, expiresInHours }),
     });
+    emailSent = true;
   } catch (err) {
-    await undo(created.user.id);
-    return NextResponse.json({ error: `Couldn't send the invite email, so nothing was created. (${err instanceof Error ? err.message : "mail error"})` }, { status: 502 });
+    emailError = err instanceof Error ? err.message : "mail error";
   }
 
-  return NextResponse.json({ school, link: `${req.nextUrl.origin}/s/${school.code}` });
+  return NextResponse.json({
+    school,
+    link: `${req.nextUrl.origin}/s/${school.code}`,
+    emailSent,
+    emailError,
+    adminEmail,
+    expiresInHours,
+    // Only handed back when the email didn't go out; the response goes to the platform owner alone.
+    inviteLink: emailSent ? null : inviteLink,
+  });
 }
 
 export async function PATCH(req: NextRequest) {

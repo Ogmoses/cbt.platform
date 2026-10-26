@@ -217,7 +217,15 @@ function AddSchoolModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
   const [adminEmail, setAdminEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ link: string; name: string } | null>(null);
+  const [result, setResult] = useState<{
+    link: string;
+    name: string;
+    emailSent: boolean;
+    emailError: string | null;
+    adminEmail: string;
+    inviteLink: string | null;
+    expiresInHours: number;
+  } | null>(null);
 
   const submit = async () => {
     setSaving(true);
@@ -230,7 +238,15 @@ function AddSchoolModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't add the school.");
-      setResult({ link: data.link, name: data.school.name });
+      setResult({
+        link: data.link,
+        name: data.school.name,
+        emailSent: data.emailSent,
+        emailError: data.emailError,
+        adminEmail: data.adminEmail,
+        inviteLink: data.inviteLink,
+        expiresInHours: data.expiresInHours,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add the school.");
     } finally {
@@ -254,8 +270,22 @@ function AddSchoolModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
         {result ? (
           <div className="space-y-3 text-[13.5px] text-ink/70 dark:text-white/70">
             <p>
-              <strong className="text-ink dark:text-white">{result.name}</strong> is active, and an invite email is on its way to the first admin. Send the school its link:
+              <strong className="text-ink dark:text-white">{result.name}</strong> is active.{" "}
+              {result.emailSent ? `An invite email is on its way to ${result.adminEmail}.` : "The school and its admin account were created, but the invite email could not be sent."}
             </p>
+            {!result.emailSent && result.inviteLink && (
+              <div className="space-y-2 rounded-md bg-amber-50 p-3 dark:bg-amber-500/15">
+                <p className="text-[12.5px] text-amber-800 dark:text-amber-300">
+                  Send this invite link to {result.adminEmail} yourself (it works once and expires in {result.expiresInHours} hours). They use it to set their password.
+                </p>
+                <p className="break-all rounded bg-white px-2.5 py-2 font-mono text-[11.5px] text-ink dark:bg-black/30 dark:text-white">{result.inviteLink}</p>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(result.inviteLink!)} className="w-full rounded-md bg-amber-600 py-2 text-[12.5px] font-medium text-white">
+                  Copy invite link
+                </button>
+                {result.emailError && <p className="text-[11px] text-amber-700/80 dark:text-amber-300/70">Email error: {result.emailError}</p>}
+              </div>
+            )}
+            <p>The school's own link:</p>
             <p className="break-all rounded-md bg-background-muted px-3 py-2 font-mono text-[12.5px] text-ink dark:bg-white/5 dark:text-white">{result.link}</p>
             <button type="button" onClick={() => navigator.clipboard?.writeText(result.link)} className="w-full rounded-lg bg-background-muted py-2.5 text-[13px] font-medium text-ink dark:bg-white/5 dark:text-white">
               Copy link
