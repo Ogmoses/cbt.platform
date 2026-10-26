@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCallerContext } from "@/lib/auth/callerContext";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { seededShuffle } from "@/lib/shuffle";
 import type { AnswersMap, ExamData, ExamQuestion } from "@/components/exam/ExamInterface";
@@ -35,20 +35,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "examId, batchId, and deviceFingerprint are required." }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-  const studentId = auth.user.id;
+  const guard = await getCallerContext();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
+  const studentId = ctx.userId;
 
+  // Service-role client: it ignores RLS, so EVERY query below is filtered by
+  // ctx.schoolId — an exam/batch id from another school simply isn't found.
   const admin = createAdminClient();
 
   // ---- Exam + batch + roster checks ----
-  const { data: exam } = await admin.from("exams").select("id, title, duration_minutes, status, subjects(name)").eq("id", examId).single();
+  const { data: exam } = await admin.from("exams").select("id, title, duration_minutes, status, subjects(name)").eq("id", examId).eq("school_id", ctx.schoolId).maybeSingle();
   if (!exam || exam.status !== "published") {
     return NextResponse.json({ error: "This exam isn't available." }, { status: 403 });
   }
 
-  const { data: batch } = await admin.from("exam_batches").select("id, starts_at, ends_at").eq("id", batchId).eq("exam_id", examId).single();
+  const { data: batch } = await admin.from("exam_batches").select("id, starts_at, ends_at").eq("id", batchId).eq("exam_id", examId).eq("school_id", ctx.schoolId).maybeSingle();
   if (!batch) return NextResponse.json({ error: "Batch not found for this exam." }, { status: 404 });
 
   const now = new Date();
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "This batch's time window isn't open." }, { status: 403 });
   }
 
-  const { data: assignment } = await admin.from("batch_students").select("student_id").eq("batch_id", batchId).eq("student_id", studentId).maybeSingle();
+  const { data: assignment } = await admin.from("batch_students").select("student_id").eq("batch_id", batchId).eq("student_id", studentId).eq("school_id", ctx.schoolId).maybeSingle();
   if (!assignment) return NextResponse.json({ error: "You aren't assigned to this batch." }, { status: 403 });
 
   // ---- Single active-session enforcement ----
@@ -65,6 +67,7 @@ export async function POST(req: NextRequest) {
     .select("id, status, device_fingerprint, last_heartbeat_at")
     .eq("exam_id", examId)
     .eq("student_id", studentId)
+    .eq("school_id", ctx.schoolId)
     .maybeSingle();
 
   let sessionId: string;
@@ -72,7 +75,7 @@ export async function POST(req: NextRequest) {
   if (!existing) {
     const { data: created, error } = await admin
       .from("student_exam_sessions")
-      .insert({ exam_id: examId, batch_id: batchId, student_id: studentId, status: "active", device_fingerprint: deviceFingerprint })
+      .insert({ school_id: ctx.schoolId, exam_id: examId, batch_id: batchId, student_id: studentId, status: "active", device_fingerprint: deviceFingerprint })
       .select("id")
       .single();
     if (error || !created) return NextResponse.json({ error: "Couldn't start the exam session." }, { status: 500 });
@@ -103,9 +106,10 @@ export async function POST(req: NextRequest) {
     .from("exam_questions")
     .select("order_index, questions(id, type, prompt, image_url, points, question_options(id, option_text, order_index))")
     .eq("exam_id", examId)
+    .eq("school_id", ctx.schoolId)
     .order("order_index");
 
-  const { data: examSettings } = await admin.from("exams").select("shuffle_questions, shuffle_options").eq("id", examId).single();
+  const { data: examSettings } = await admin.from("exams").select("shuffle_questions, shuffle_options").eq("id", examId).eq("school_id", ctx.schoolId).single();
 
   let questions: ExamQuestion[] = (examQuestions ?? []).map((eq: any) => ({
     id: eq.questions.id,
@@ -132,7 +136,7 @@ export async function POST(req: NextRequest) {
   };
 
   // ---- Restore any answers already saved for this session ----
-  const { data: savedAnswers } = await admin.from("student_answers").select("question_id, selected_option_id, free_text_answer, is_flagged").eq("session_id", sessionId);
+  const { data: savedAnswers } = await admin.from("student_answers").select("question_id, selected_option_id, free_text_answer, is_flagged").eq("session_id", sessionId).eq("school_id", ctx.schoolId);
   const existingAnswers: AnswersMap = {};
   for (const a of savedAnswers ?? []) {
     existingAnswers[a.question_id] = { value: a.selected_option_id ?? a.free_text_answer ?? "", flagged: a.is_flagged };

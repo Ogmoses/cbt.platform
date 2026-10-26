@@ -19,8 +19,17 @@ export function deriveStudentPassword(fullName: string, studentId: string): stri
   return `${normalize(fullName)}::${normalize(studentId)}`;
 }
 
-/** Turns a student ID into a valid, unique-enough email local-part — IDs like "SFGS/2026/001" contain characters (like "/") that aren't valid there. */
-export function studentInternalEmail(studentId: string): string {
+/**
+ * Turns a student ID into a valid, globally unique email — IDs like
+ * "SFGS/2026/001" contain characters (like "/") that aren't valid there.
+ * The school's code is part of it, so two schools can both have a student
+ * "001". The sanitized ID can never contain a ".", so the first "." always
+ * separates the school code from the ID — no two (school, ID) pairs can ever
+ * produce the same address. (Students created before multi-tenancy keep the
+ * old code-less address stored on their account; login looks the address up
+ * by student ID, so those keep working untouched.)
+ */
+export function studentInternalEmail(studentId: string, schoolCode: string): string {
   const safe = studentId.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return `${safe}@students.internal`;
+  return `${schoolCode}.${safe}@students.internal`;
 }

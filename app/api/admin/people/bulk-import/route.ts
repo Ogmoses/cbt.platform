@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deriveStudentPassword, studentInternalEmail } from "@/lib/studentCredential";
 import { issueAccessToken } from "@/lib/accessTokens";
 import { sendMail } from "@/lib/mailer";
 import { inviteEmailHtml } from "@/lib/emailTemplates";
 import { getSchoolNameServer } from "@/lib/schoolProfileServer";
+import { getCallerContext } from "@/lib/auth/callerContext";
 
 /**
  * POST /api/admin/people/bulk-import
@@ -26,21 +26,22 @@ import { getSchoolNameServer } from "@/lib/schoolProfileServer";
  */
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-  const { data: caller } = await supabase.from("users").select("role").eq("id", auth.user.id).single();
-  if (caller?.role !== "super_admin") return NextResponse.json({ error: "Only an admin can import accounts." }, { status: 403 });
+  const guard = await getCallerContext({ roles: ["super_admin"], forbiddenMessage: "Only an admin can import accounts." });
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const { role, rows } = await req.json();
   if (!role || !Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json({ error: "role and a non-empty rows array are required." }, { status: 400 });
   }
+  if (role !== "student" && role !== "teacher") {
+    return NextResponse.json({ error: "Only students and teachers can be imported." }, { status: 400 });
+  }
 
   const admin = createAdminClient();
   // Fetched once per import batch, not once per row — same value for every
   // teacher email in this run, so there's no reason to hit the DB 40 times.
-  const schoolName = role === "teacher" ? await getSchoolNameServer(admin) : "";
+  const schoolName = role === "teacher" ? await getSchoolNameServer(admin, ctx.schoolId) : "";
   // "identifier" is whichever field actually names the row in the results
   // list — a student's own student ID (they have no email at all now), or
   // a teacher's email (still how they're invited).
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       let authUserId: string;
 
       if (role === "student") {
-        const email = studentInternalEmail(row.admissionNumber);
+        const email = studentInternalEmail(row.admissionNumber, ctx.schoolCode);
         const password = deriveStudentPassword(row.fullName, row.admissionNumber);
         const { data: created, error: authError } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
         if (authError || !created.user) throw new Error(authError?.message ?? "Couldn't create the account.");
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
 
         const { error: profileError } = await admin.from("users").insert({
           id: authUserId,
+          school_id: ctx.schoolId,
           role,
           full_name: row.fullName,
           email,
@@ -83,6 +85,7 @@ export async function POST(req: NextRequest) {
 
         const { error: profileError } = await admin.from("users").insert({
           id: authUserId,
+          school_id: ctx.schoolId,
           role,
           full_name: row.fullName,
           email: row.email,

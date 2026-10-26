@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCallerContext } from "@/lib/auth/callerContext";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -27,9 +27,9 @@ export async function GET(req: NextRequest) {
   const examId = req.nextUrl.searchParams.get("examId");
   if (!examId) return NextResponse.json({ error: "examId is required." }, { status: 400 });
 
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const guard = await getCallerContext();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const admin = createAdminClient();
 
@@ -37,37 +37,40 @@ export async function GET(req: NextRequest) {
     .from("student_exam_sessions")
     .select("id, status")
     .eq("exam_id", examId)
-    .eq("student_id", auth.user.id)
-    .single();
+    .eq("student_id", ctx.userId)
+    .eq("school_id", ctx.schoolId)
+    .maybeSingle();
   if (!session) return NextResponse.json({ error: "No attempt found for this exam." }, { status: 404 });
   if (session.status === "active") {
     return NextResponse.json({ error: "Finish the exam before reviewing it." }, { status: 409 });
   }
 
-  const { data: exam } = await admin.from("exams").select("title, allow_review, max_score").eq("id", examId).single();
+  const { data: exam } = await admin.from("exams").select("title, allow_review, max_score").eq("id", examId).eq("school_id", ctx.schoolId).maybeSingle();
   if (!exam) return NextResponse.json({ error: "Exam not found." }, { status: 404 });
   if (!exam.allow_review) {
     return NextResponse.json({ error: "Your teacher hasn't turned on review for this exam." }, { status: 403 });
   }
 
-  const { data: batches } = await admin.from("exam_batches").select("ends_at").eq("exam_id", examId);
+  const { data: batches } = await admin.from("exam_batches").select("ends_at").eq("exam_id", examId).eq("school_id", ctx.schoolId);
   const allBatchesEnded = (batches ?? []).every((b) => new Date(b.ends_at).getTime() <= Date.now());
   if (!allBatchesEnded) {
     return NextResponse.json({ error: "Review unlocks once every sitting of this exam has finished." }, { status: 403 });
   }
 
-  const { data: result } = await admin.from("results").select("total_score").eq("exam_id", examId).eq("student_id", auth.user.id).maybeSingle();
+  const { data: result } = await admin.from("results").select("total_score").eq("exam_id", examId).eq("student_id", ctx.userId).eq("school_id", ctx.schoolId).maybeSingle();
 
   const { data: examQuestions } = await admin
     .from("exam_questions")
     .select("order_index, questions(id, type, prompt, points, reference_answer, question_options(id, option_text, is_correct, order_index))")
     .eq("exam_id", examId)
+    .eq("school_id", ctx.schoolId)
     .order("order_index");
 
   const { data: answerRows } = await admin
     .from("student_answers")
     .select("question_id, selected_option_id, free_text_answer, points_awarded")
-    .eq("session_id", session.id);
+    .eq("session_id", session.id)
+    .eq("school_id", ctx.schoolId);
 
   const answerByQuestion = new Map((answerRows ?? []).map((a) => [a.question_id, a]));
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCallerContext } from "@/lib/auth/callerContext";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeGradeLetter } from "@/lib/grading";
 
@@ -26,33 +26,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "answerId and pointsAwarded are required." }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-
-  const { data: grader } = await supabase.from("users").select("role").eq("id", auth.user.id).single();
-  if (!grader || (grader.role !== "teacher" && grader.role !== "super_admin")) {
-    return NextResponse.json({ error: "Only teachers can grade answers." }, { status: 403 });
-  }
+  const guard = await getCallerContext({ roles: ["teacher", "super_admin"], forbiddenMessage: "Only teachers can grade answers." });
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const admin = createAdminClient();
 
-  const { data: answer } = await admin.from("student_answers").select("id, session_id").eq("id", answerId).single();
+  // Scoped to the grader's school: an answer id from another school isn't found.
+  const { data: answer } = await admin.from("student_answers").select("id, session_id").eq("id", answerId).eq("school_id", ctx.schoolId).maybeSingle();
   if (!answer) return NextResponse.json({ error: "Answer not found." }, { status: 404 });
 
   await admin
     .from("student_answers")
-    .update({ points_awarded: pointsAwarded, feedback: feedback ?? null, graded_by: auth.user.id, graded_at: new Date().toISOString() })
-    .eq("id", answerId);
+    .update({ points_awarded: pointsAwarded, feedback: feedback ?? null, graded_by: ctx.userId, graded_at: new Date().toISOString() })
+    .eq("id", answerId)
+    .eq("school_id", ctx.schoolId);
 
   // ---- Check whether the whole session is now fully graded, and if so, roll up the result ----
-  const { data: session } = await admin.from("student_exam_sessions").select("id, exam_id, student_id").eq("id", answer.session_id).single();
+  const { data: session } = await admin.from("student_exam_sessions").select("id, exam_id, student_id").eq("id", answer.session_id).eq("school_id", ctx.schoolId).maybeSingle();
   if (!session) return NextResponse.json({ ok: true, sessionFullyGraded: false });
 
   const { data: sessionAnswers } = await admin
     .from("student_answers")
     .select("points_awarded, questions(type, points)")
-    .eq("session_id", session.id);
+    .eq("session_id", session.id)
+    .eq("school_id", ctx.schoolId);
 
   const stillPending = (sessionAnswers ?? []).some((a) => a.points_awarded === null);
   if (stillPending) return NextResponse.json({ ok: true, sessionFullyGraded: false });
@@ -62,15 +60,16 @@ export async function POST(req: NextRequest) {
     .reduce((sum, a) => sum + (a.points_awarded ?? 0), 0);
   const maxScore = (sessionAnswers ?? []).reduce((sum: number, a: any) => sum + a.questions.points, 0);
 
-  const { data: existingResult } = await admin.from("results").select("objective_score").eq("session_id", session.id).single();
+  const { data: existingResult } = await admin.from("results").select("objective_score").eq("session_id", session.id).eq("school_id", ctx.schoolId).single();
   const objectiveScore = existingResult?.objective_score ?? 0;
   const totalScore = objectiveScore + theoryScore;
 
-  const { data: scaleRows } = await admin.from("grading_scale").select("min_score, max_score, grade_letter");
+  // This school's OWN scale only — without the filter, every school's bands would be mixed together.
+  const { data: scaleRows } = await admin.from("grading_scale").select("min_score, max_score, grade_letter").eq("school_id", ctx.schoolId);
   const percentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
   const gradeLetter = computeGradeLetter(percentage, (scaleRows ?? []).map((r) => ({ minScore: r.min_score, maxScore: r.max_score, gradeLetter: r.grade_letter })));
 
-  await admin.from("results").update({ theory_score: theoryScore, total_score: totalScore, grade_letter: gradeLetter }).eq("session_id", session.id);
+  await admin.from("results").update({ theory_score: theoryScore, total_score: totalScore, grade_letter: gradeLetter }).eq("session_id", session.id).eq("school_id", ctx.schoolId);
 
   return NextResponse.json({ ok: true, sessionFullyGraded: true, totalScore, maxScore, gradeLetter });
 }

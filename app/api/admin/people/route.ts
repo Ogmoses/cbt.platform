@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deriveStudentPassword, studentInternalEmail } from "@/lib/studentCredential";
 import { issueAccessToken } from "@/lib/accessTokens";
 import { sendMail } from "@/lib/mailer";
 import { inviteEmailHtml } from "@/lib/emailTemplates";
 import { getSchoolNameServer } from "@/lib/schoolProfileServer";
+import { getCallerContext } from "@/lib/auth/callerContext";
 
 /**
  * Admin-only account management for students and teachers.
@@ -30,22 +30,24 @@ import { getSchoolNameServer } from "@/lib/schoolProfileServer";
  *            cascade` in database/schema.sql).
  */
 
-async function assertIsAdmin() {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false as const, status: 401, error: "Not signed in." };
-  const { data: profile } = await supabase.from("users").select("role").eq("id", auth.user.id).single();
-  if (profile?.role !== "super_admin") return { ok: false as const, status: 403, error: "Only an admin can manage accounts." };
-  return { ok: true as const };
-}
+// Every action here is scoped to the ADMIN'S OWN school: this route uses the
+// service-role client (which ignores RLS), so each query below filters by
+// ctx.schoolId and each insert carries it.
+const assertIsAdmin = () => getCallerContext({ roles: ["super_admin"], forbiddenMessage: "Only an admin can manage accounts." });
+
+const CREATABLE_ROLES = ["student", "teacher", "super_admin"];
 
 export async function POST(req: NextRequest) {
   const guard = await assertIsAdmin();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const { role, fullName, email, admissionNumber, staffId, classId } = await req.json();
   if (!role || !fullName?.trim()) {
     return NextResponse.json({ error: "role and fullName are required." }, { status: 400 });
+  }
+  if (!CREATABLE_ROLES.includes(role)) {
+    return NextResponse.json({ error: "That role can't be created here." }, { status: 400 });
   }
   if (role !== "student" && !email?.trim()) {
     return NextResponse.json({ error: "email is required." }, { status: 400 });
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
   let studentEmail: string | undefined;
 
   if (role === "student") {
-    studentEmail = studentInternalEmail(admissionNumber);
+    studentEmail = studentInternalEmail(admissionNumber, ctx.schoolCode);
     const password = deriveStudentPassword(fullName, admissionNumber);
     const { data: created, error: authError } = await admin.auth.admin.createUser({ email: studentEmail, password, email_confirm: true });
     if (authError || !created.user) {
@@ -82,6 +84,7 @@ export async function POST(req: NextRequest) {
 
   const { error: profileError } = await admin.from("users").insert({
     id: authUserId,
+    school_id: ctx.schoolId,
     role,
     full_name: fullName,
     email: role === "student" ? studentEmail : email,
@@ -106,7 +109,7 @@ export async function POST(req: NextRequest) {
   // account with no way in.
   try {
     const { token, expiresInHours } = await issueAccessToken(admin, { userId: authUserId, purpose: "invite" });
-    const schoolName = await getSchoolNameServer(admin);
+    const schoolName = await getSchoolNameServer(admin, ctx.schoolId);
     const link = `${req.nextUrl.origin}/set-password?token=${token}`;
     await sendMail({
       to: email,
@@ -124,12 +127,16 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const guard = await assertIsAdmin();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const { id, fullName, email, admissionNumber, staffId, classId, isActive } = await req.json();
   if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
 
   const admin = createAdminClient();
-  const { data: existing } = await admin.from("users").select("role, full_name, admission_number").eq("id", id).single();
+  // Must be someone in THIS admin's school — otherwise a guessed id from
+  // another school would be editable.
+  const { data: existing } = await admin.from("users").select("role, full_name, admission_number").eq("id", id).eq("school_id", ctx.schoolId).maybeSingle();
+  if (!existing) return NextResponse.json({ error: "Person not found." }, { status: 404 });
 
   const patch: Record<string, unknown> = {};
   if (fullName !== undefined) patch.full_name = fullName;
@@ -138,13 +145,13 @@ export async function PATCH(req: NextRequest) {
   if (classId !== undefined) patch.class_id = classId || null;
   if (isActive !== undefined) patch.is_active = isActive;
 
-  const { error } = await admin.from("users").update(patch).eq("id", id);
+  const { error } = await admin.from("users").update(patch).eq("id", id).eq("school_id", ctx.schoolId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (email) {
     const { error: authError } = await admin.auth.admin.updateUserById(id, { email });
     if (authError) return NextResponse.json({ error: authError.message }, { status: 500 });
-    await admin.from("users").update({ email }).eq("id", id);
+    await admin.from("users").update({ email }).eq("id", id).eq("school_id", ctx.schoolId);
   }
 
   // A student's password is derived from name + student ID (see
@@ -169,11 +176,15 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const guard = await assertIsAdmin();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const { id } = await req.json();
   if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
 
   const admin = createAdminClient();
+  const { data: target } = await admin.from("users").select("id").eq("id", id).eq("school_id", ctx.schoolId).maybeSingle();
+  if (!target) return NextResponse.json({ error: "Person not found." }, { status: 404 });
+
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

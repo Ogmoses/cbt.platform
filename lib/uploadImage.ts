@@ -35,9 +35,11 @@ async function shrinkIfLarge(file: File, maxDim = 1600): Promise<File> {
  * Uploads an image to Supabase Storage and returns its public URL.
  * Throws an Error with a user-readable message on any failure.
  *
- * - question-images: stored under `<user id>/<uuid>.<ext>` (RLS only lets a
- *   teacher write inside their own folder)
- * - school-assets: stored under `logo/<uuid>.<ext>` (admin-only)
+ * Paths start with the caller's school id (the storage policies require it,
+ * so one school can never write into another's folder):
+ * - question-images: `<school_id>/<user_id>/<uuid>.<ext>` (a teacher may only
+ *   write inside their own user folder)
+ * - school-assets: `<school_id>/<uuid>.<ext>` (admin-only)
  */
 export async function uploadImage(bucket: ImageBucket, file: File): Promise<string> {
   const limits = LIMITS[bucket];
@@ -52,8 +54,11 @@ export async function uploadImage(bucket: ImageBucket, file: File): Promise<stri
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("You're signed out. Sign in again and retry.");
 
+  const { data: schoolId } = await supabase.rpc("get_user_school_id");
+  if (!schoolId) throw new Error("Couldn't tell which school you belong to. Sign in again and retry.");
+
   const ext = (toUpload.type.split("/")[1] ?? "png").replace("jpeg", "jpg");
-  const folder = bucket === "question-images" ? auth.user.id : "logo";
+  const folder = bucket === "question-images" ? `${schoolId}/${auth.user.id}` : `${schoolId}`;
   const path = `${folder}/${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage.from(bucket).upload(path, toUpload, { contentType: toUpload.type, upsert: false });

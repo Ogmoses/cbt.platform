@@ -43,9 +43,15 @@ export async function issueAccessToken(
   const expiresInHours = TTL_HOURS[opts.purpose];
   const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
 
+  // The token inherits the account's school (service-role inserts have no
+  // signed-in user to infer it from).
+  const { data: owner } = await admin.from("users").select("school_id").eq("id", opts.userId).maybeSingle();
+  if (!owner?.school_id) throw new Error("Couldn't create access token: that account has no school.");
+
   await admin.from("access_tokens").delete().eq("user_id", opts.userId).eq("purpose", opts.purpose).is("used_at", null);
 
   const { error } = await admin.from("access_tokens").insert({
+    school_id: owner.school_id,
     user_id: opts.userId,
     purpose: opts.purpose,
     token_hash: tokenHash,

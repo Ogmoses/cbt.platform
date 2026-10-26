@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCallerContext } from "@/lib/auth/callerContext";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AnswersMap } from "@/components/exam/ExamInterface";
 
@@ -22,14 +22,14 @@ export async function POST(req: NextRequest) {
   const { sessionId, answers } = (await req.json()) as { sessionId: string; answers: AnswersMap };
   if (!sessionId || !answers) return NextResponse.json({ error: "sessionId and answers are required." }, { status: 400 });
 
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const guard = await getCallerContext();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const admin = createAdminClient();
 
-  const { data: session } = await admin.from("student_exam_sessions").select("id, exam_id, student_id, status").eq("id", sessionId).single();
-  if (!session || session.student_id !== auth.user.id) {
+  const { data: session } = await admin.from("student_exam_sessions").select("id, exam_id, student_id, status").eq("id", sessionId).eq("school_id", ctx.schoolId).maybeSingle();
+  if (!session || session.student_id !== ctx.userId) {
     return NextResponse.json({ error: "Session not found." }, { status: 404 });
   }
   if (session.status !== "active") {
@@ -38,12 +38,13 @@ export async function POST(req: NextRequest) {
 
   // Need each question's type to know whether the value is an option id
   // (multiple_choice/true_false) or free text (fill_blank/short_theory).
-  const { data: examQuestions } = await admin.from("exam_questions").select("questions(id, type)").eq("exam_id", session.exam_id);
+  const { data: examQuestions } = await admin.from("exam_questions").select("questions(id, type)").eq("exam_id", session.exam_id).eq("school_id", ctx.schoolId);
   const typeByQuestion = new Map((examQuestions ?? []).map((eq: any) => [eq.questions.id, eq.questions.type as string]));
 
   const rows = Object.entries(answers).map(([questionId, a]) => {
     const isObjective = typeByQuestion.get(questionId) === "multiple_choice" || typeByQuestion.get(questionId) === "true_false";
     return {
+      school_id: ctx.schoolId,
       session_id: sessionId,
       question_id: questionId,
       selected_option_id: isObjective ? a.value || null : null,

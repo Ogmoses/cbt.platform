@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCallerContext } from "@/lib/auth/callerContext";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { gradeObjectiveAnswers, sumAwardedPoints, type GradableQuestion, type SubmittedAnswer } from "@/lib/grading";
 import type { AnswersMap } from "@/components/exam/ExamInterface";
@@ -25,23 +25,24 @@ export async function POST(req: NextRequest) {
   const { sessionId, answers } = (await req.json()) as { sessionId: string; answers: AnswersMap };
   if (!sessionId) return NextResponse.json({ error: "sessionId is required." }, { status: 400 });
 
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  const guard = await getCallerContext();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+  const { ctx } = guard;
 
   const admin = createAdminClient();
 
-  const { data: session } = await admin.from("student_exam_sessions").select("id, exam_id, student_id, status").eq("id", sessionId).single();
-  if (!session || session.student_id !== auth.user.id) return NextResponse.json({ error: "Session not found." }, { status: 404 });
+  const { data: session } = await admin.from("student_exam_sessions").select("id, exam_id, student_id, status").eq("id", sessionId).eq("school_id", ctx.schoolId).maybeSingle();
+  if (!session || session.student_id !== ctx.userId) return NextResponse.json({ error: "Session not found." }, { status: 404 });
   if (session.status !== "active") return NextResponse.json({ error: "This exam has already been submitted." }, { status: 409 });
 
-  const { data: exam } = await admin.from("exams").select("show_result_instantly, allow_review").eq("id", session.exam_id).single();
+  const { data: exam } = await admin.from("exams").select("show_result_instantly, allow_review").eq("id", session.exam_id).eq("school_id", ctx.schoolId).single();
 
   // ---- Fetch grading data: each question's type/points/correct answer ----
   const { data: examQuestions } = await admin
     .from("exam_questions")
     .select("questions(id, type, points, reference_answer, question_options(id, is_correct))")
-    .eq("exam_id", session.exam_id);
+    .eq("exam_id", session.exam_id)
+    .eq("school_id", ctx.schoolId);
 
   const gradableQuestions: GradableQuestion[] = (examQuestions ?? []).map((eq: any) => ({
     id: eq.questions.id,
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
     const rows = Object.entries(answers).map(([questionId, a]) => {
       const isObjective = typeById.get(questionId) === "multiple_choice" || typeById.get(questionId) === "true_false";
       return {
+        school_id: ctx.schoolId,
         session_id: sessionId,
         question_id: questionId,
         selected_option_id: isObjective ? a.value || null : null,
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ---- Auto-grade ----
-  const { data: savedAnswers } = await admin.from("student_answers").select("question_id, selected_option_id, free_text_answer").eq("session_id", sessionId);
+  const { data: savedAnswers } = await admin.from("student_answers").select("question_id, selected_option_id, free_text_answer").eq("session_id", sessionId).eq("school_id", ctx.schoolId);
   const submitted: SubmittedAnswer[] = (savedAnswers ?? []).map((a) => ({
     questionId: a.question_id,
     selectedOptionId: a.selected_option_id,
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
 
   await admin.from("results").upsert(
     {
+      school_id: ctx.schoolId,
       student_id: session.student_id,
       exam_id: session.exam_id,
       session_id: sessionId,

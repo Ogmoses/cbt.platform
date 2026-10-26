@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Server-side counterpart to lib/useSchoolProfile.ts's client hook — used
- * only where a component isn't available (email templates, sent from API
- * routes). Same fallback as the client hook, for the same reason: a broken
- * fetch should never produce blank branding in an email a teacher receives.
+ * Server-side school name, for emails sent from API routes (invite, reset)
+ * where no React component is available. Takes the school's id: there is no
+ * longer one global school. A broken lookup falls back to a generic label
+ * rather than producing blank branding in an email someone receives.
  */
-export async function getSchoolNameServer(admin: SupabaseClient): Promise<string> {
-  const { data } = await admin.from("school_profile").select("school_name").single();
-  return data?.school_name || "CBT Platform";
+export async function getSchoolNameServer(admin: SupabaseClient, schoolId: string): Promise<string> {
+  const { data } = await admin.from("schools").select("name").eq("id", schoolId).maybeSingle();
+  return data?.name || "CBT Platform";
 }
