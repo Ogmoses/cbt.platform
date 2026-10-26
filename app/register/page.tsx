@@ -62,6 +62,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Waves, Eye, EyeOff, Loader2, AlertCircle, KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { roleHome } from "@/lib/roleHome";
 import { useSchoolProfile, schoolSlug } from "@/lib/useSchoolProfile";
 
 type Stage = "checking" | "needs-fallback" | "ready";
@@ -178,7 +179,7 @@ export default function RegisterPage() {
 
       const { data: auth } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from("users").select("role").eq("id", auth.user!.id).single();
-      router.push(profile?.role === "super_admin" ? "/admin" : "/teacher");
+      router.push(roleHome(profile?.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't set your password. Try again.");
     } finally {

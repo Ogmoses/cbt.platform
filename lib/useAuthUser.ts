@@ -6,7 +6,7 @@ import { createClient } from "./supabase/client";
 export interface AuthUser {
   id: string;
   fullName: string;
-  role: "super_admin" | "teacher" | "student";
+  role: "platform_owner" | "super_admin" | "teacher" | "student";
 }
 
 /**

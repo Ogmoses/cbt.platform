@@ -21,6 +21,7 @@ import type { ColorScheme } from "@/lib/colorScheme";
 import PageLoading from "@/components/layout/PageLoading";
 
 const ROLE_LABEL: Record<string, string> = {
+  platform_owner: "Platform owner",
   super_admin: "Administrator",
   teacher: "Teacher",
   student: "Student",

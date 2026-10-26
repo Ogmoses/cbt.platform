@@ -17,9 +17,10 @@ import {
   FileText,
   X,
   Waves,
+  Building2,
 } from "lucide-react";
 
-export type Role = "super_admin" | "teacher" | "student";
+export type Role = "platform_owner" | "super_admin" | "teacher" | "student";
 
 interface NavItem {
   label: string;
@@ -28,6 +29,7 @@ interface NavItem {
 }
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
+  platform_owner: [{ label: "Schools", href: "/owner", icon: Building2 }],
   super_admin: [
     { label: "Overview", href: "/admin", icon: LayoutDashboard },
     { label: "Students & Teachers", href: "/admin/people", icon: Users },
@@ -78,7 +80,9 @@ function SidebarContent({ role, userName, onNavigate }: { role: Role; userName: 
     return best;
   }, null);
 
-  const school = useSchoolProfile();
+  const schoolProfile = useSchoolProfile();
+  // The platform owner belongs to no school, so show the platform instead of a school.
+  const school = role === "platform_owner" ? { name: "Platform Console", motto: "All schools", logoUrl: null } : schoolProfile;
 
   return (
     <div className="flex h-full flex-col bg-white dark:bg-[#16181C]">

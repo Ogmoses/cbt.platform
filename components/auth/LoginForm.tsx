@@ -21,10 +21,13 @@ type Mode = "student" | "staff";
 interface LoginFormProps {
   onStudentLogin: (fullName: string, studentId: string) => Promise<void>;
   onStaffLogin: (email: string, password: string) => Promise<void>;
+  /** Branding to show instead of the default school's — used by each school's own /s/<code> page. */
+  school?: { name: string; motto: string | null; logoUrl: string | null };
 }
 
-export default function LoginForm({ onStudentLogin, onStaffLogin }: LoginFormProps) {
-  const school = useSchoolProfile();
+export default function LoginForm({ onStudentLogin, onStaffLogin, school: schoolOverride }: LoginFormProps) {
+  const defaultSchool = useSchoolProfile();
+  const school = schoolOverride ?? defaultSchool;
   const [mode, setMode] = useState<Mode>("student");
   const [studentName, setStudentName] = useState("");
   const [studentId, setStudentId] = useState("");
