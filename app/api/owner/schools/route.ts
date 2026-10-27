@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   let expiresInHours: number;
   try {
     const issued = await issueAccessToken(admin, { userId: created.user.id, purpose: "invite" });
-    inviteLink = `${req.nextUrl.origin}/set-password?token=${issued.token}`;
+    inviteLink = `${req.nextUrl.origin}/set-password?token=${issued.token}&school=${school.code}`;
     expiresInHours = issued.expiresInHours;
   } catch (err) {
     await undo(created.user.id);

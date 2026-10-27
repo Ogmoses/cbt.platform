@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import LoginForm from "@/components/auth/LoginForm";
 import { createClient } from "@/lib/supabase/client";
@@ -13,10 +14,28 @@ import { useSchool } from "@/components/SchoolProvider";
  * student's ID is looked up only within that school — so two schools can both
  * have a student "001" — and the page shows that school's branding.
  */
+const LAST_SCHOOL_KEY = "cbt-last-school-code";
+
 export default function SchoolLogin({ schoolCode }: { schoolCode?: string }) {
   const router = useRouter();
   const supabase = createClient();
   const { school } = useSchool();
+
+  // Remember which school this device signs in to. The plain /login address
+  // (old bookmarks, home-screen shortcuts) then sends the person straight to
+  // their school's own page instead of a generic screen.
+  useEffect(() => {
+    try {
+      if (schoolCode) {
+        window.localStorage.setItem(LAST_SCHOOL_KEY, schoolCode);
+      } else {
+        const last = window.localStorage.getItem(LAST_SCHOOL_KEY);
+        if (last) router.replace(`/s/${last}`);
+      }
+    } catch {
+      // Storage unavailable (private browsing) — the generic login still works.
+    }
+  }, [schoolCode, router]);
 
   const handleStudentLogin = async (fullName: string, studentId: string) => {
     // Student IDs aren't emails, and Supabase Auth signs in by email —

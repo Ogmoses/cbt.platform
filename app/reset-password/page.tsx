@@ -39,7 +39,8 @@ function PageLoading() {
 function ResetPasswordInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const school = useSchoolProfile();
+  const schoolCode = searchParams.get("school");
+  const school = useSchoolProfile(schoolCode);
   const token = searchParams.get("token");
 
   const [password, setPassword] = useState("");
@@ -72,7 +73,7 @@ function ResetPasswordInner() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't reset your password. Try again.");
       setDone(true);
-      setTimeout(() => router.push("/login"), 1800);
+      setTimeout(() => router.push(schoolCode ? `/s/${schoolCode}` : "/login"), 1800);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't reset your password. Try again.");
     } finally {

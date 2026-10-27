@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   try {
     const { token, expiresInHours } = await issueAccessToken(admin, { userId: authUserId, purpose: "invite" });
     const schoolName = await getSchoolNameServer(admin, ctx.schoolId);
-    const link = `${req.nextUrl.origin}/set-password?token=${token}`;
+    const link = `${req.nextUrl.origin}/set-password?token=${token}&school=${ctx.schoolCode}`;
     await sendMail({
       to: email,
       subject: `Set up your account at ${schoolName}`,

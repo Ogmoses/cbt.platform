@@ -6,6 +6,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import SettingsManager from "@/components/admin/SettingsManager";
 import { createClient } from "@/lib/supabase/client";
 import { orThrow } from "@/lib/supabaseErrors";
+import { fetchOwnSchool } from "@/lib/schoolBranding";
+import { useSchool } from "@/components/SchoolProvider";
 import { useAuthUser, signOutAndRedirect } from "@/lib/useAuthUser";
 import type { GradeBand, SchoolProfile } from "@/components/admin/types";
 import { DEFAULT_THEME_COLOR } from "@/lib/themes";
@@ -18,23 +20,26 @@ export default function AdminSettingsPage() {
   const authUser = useAuthUser();
   const supabase = createClient();
 
+  const { refresh: refreshSchool } = useSchool();
+  const [schoolId, setSchoolId] = useState<string | null>(null);
   const [profile, setProfile] = useState<SchoolProfile>(EMPTY_PROFILE);
   const [scale, setScale] = useState<GradeBand[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadAll = async () => {
-    const [{ data: profileRow }, { data: scaleRows }] = await Promise.all([
-      supabase.from("school_profile").select("school_name, motto, address, logo_url, theme_color").eq("id", true).single(),
+    const [own, { data: scaleRows }] = await Promise.all([
+      fetchOwnSchool(supabase),
       supabase.from("grading_scale").select("id, min_score, max_score, grade_letter, remark").order("min_score", { ascending: false }),
     ]);
 
-    if (profileRow) {
+    if (own) {
+      setSchoolId(own.id);
       setProfile({
-        schoolName: profileRow.school_name,
-        motto: profileRow.motto ?? "",
-        address: profileRow.address ?? "",
-        logoUrl: profileRow.logo_url,
-        themeColor: profileRow.theme_color || DEFAULT_THEME_COLOR,
+        schoolName: own.name,
+        motto: own.motto ?? "",
+        address: own.address ?? "",
+        logoUrl: own.logoUrl,
+        themeColor: own.themeColor || DEFAULT_THEME_COLOR,
       });
     }
     setScale((scaleRows ?? []).map((r) => ({ id: r.id, minScore: r.min_score, maxScore: r.max_score, gradeLetter: r.grade_letter, remark: r.remark ?? "" })));
@@ -47,17 +52,21 @@ export default function AdminSettingsPage() {
   }, []);
 
   const handleSaveProfile = async (p: SchoolProfile) => {
-    // NOTE: `logoUrl` may be a data: URL from the local file preview in
-    // SettingsManager — that's fine for a quick demo but bloats the row.
-    // For real use, upload the file to Supabase Storage first and save
-    // the returned public URL here instead.
-    await orThrow(supabase.from("school_profile").update({ school_name: p.schoolName, motto: p.motto || null, address: p.address || null, logo_url: p.logoUrl }).eq("id", true));
+    await updateSchool({ name: p.schoolName, motto: p.motto || null, address: p.address || null, logo_url: p.logoUrl });
+  };
+
+  /** Saves branding on THIS admin's own school row (the database only allows these columns, on their own school), then refreshes the sidebar/headers. */
+  const updateSchool = async (patch: Record<string, unknown>) => {
+    if (!schoolId) throw new Error("Couldn't tell which school this is. Reload and try again.");
+    const { data, error } = await supabase.from("schools").update(patch).eq("id", schoolId).select("id");
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error("Couldn't save — you may not have permission, or the school isn't active.");
     await loadAll();
+    await refreshSchool();
   };
 
   const handleSaveTheme = async (themeColor: string) => {
-    await orThrow(supabase.from("school_profile").update({ theme_color: themeColor }).eq("id", true));
-    await loadAll();
+    await updateSchool({ theme_color: themeColor });
   };
 
   const handleSaveGradingScale = async (bands: GradeBand[]) => {

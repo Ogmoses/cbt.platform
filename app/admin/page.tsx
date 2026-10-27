@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import AdminOverview from "@/components/admin/AdminOverview";
 import { createClient } from "@/lib/supabase/client";
+import { useSchoolProfile } from "@/lib/useSchoolProfile";
 import { useAuthUser, signOutAndRedirect } from "@/lib/useAuthUser";
 import type { AdminStats, TodayBatch } from "@/components/admin/types";
 import PageLoading from "@/components/layout/PageLoading";
@@ -38,7 +39,7 @@ export default function AdminOverviewPage() {
   const authUser = useAuthUser();
   const supabase = createClient();
 
-  const [schoolName, setSchoolName] = useState("Soaring Fountain Group of Schools");
+  const school = useSchoolProfile();
   const [stats, setStats] = useState<AdminStats>({ totalStudents: 0, totalTeachers: 0, totalClasses: 0, examsToday: 0 });
   const [todayBatches, setTodayBatches] = useState<TodayBatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,19 +51,16 @@ export default function AdminOverviewPage() {
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
 
-      const [{ count: totalStudents }, { count: totalTeachers }, { count: totalClasses }, { data: profileRow }, { data: batchRows }] = await Promise.all([
+      const [{ count: totalStudents }, { count: totalTeachers }, { count: totalClasses }, { data: batchRows }] = await Promise.all([
         supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "student"),
         supabase.from("users").select("id", { count: "exact", head: true }).eq("role", "teacher"),
         supabase.from("classes").select("id", { count: "exact", head: true }),
-        supabase.from("school_profile").select("school_name").eq("id", true).single(),
         supabase
           .from("exam_batches")
           .select("id, label, starts_at, ends_at, lab_room, exams(title, subjects(name), classes(name))")
           .gte("starts_at", todayStart.toISOString())
           .lte("starts_at", todayEnd.toISOString()),
       ]);
-
-      if (profileRow?.school_name) setSchoolName(profileRow.school_name);
 
       const batchIds = (batchRows ?? []).map((b) => b.id);
       const { data: batchStudentRows } = batchIds.length ? await supabase.from("batch_students").select("batch_id").in("batch_id", batchIds) : { data: [] };
@@ -90,7 +88,7 @@ export default function AdminOverviewPage() {
   return (
     <DashboardLayout role="super_admin" pageTitle="Overview" userName={authUser?.fullName ?? ""} onLogout={() => signOutAndRedirect(router)}>
       {loading ? <PageLoading /> : (
-        <AdminOverview schoolName={schoolName} stats={stats} todayBatches={todayBatches} conflictBatchIds={findConflicts(todayBatches)} />
+        <AdminOverview schoolName={school.name} stats={stats} todayBatches={todayBatches} conflictBatchIds={findConflicts(todayBatches)} />
       )}
     </DashboardLayout>
   );

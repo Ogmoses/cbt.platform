@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   try {
     const { token, expiresInHours } = await issueAccessToken(admin, { userId: user.id, purpose: "reset" });
     const schoolName = await getSchoolNameServer(admin, ctx.schoolId);
-    const link = `${req.nextUrl.origin}/reset-password?token=${token}`;
+    const link = `${req.nextUrl.origin}/reset-password?token=${token}&school=${ctx.schoolCode}`;
     await sendMail({
       to: email.trim(),
       subject: `Reset your password — ${schoolName}`,

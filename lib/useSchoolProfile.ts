@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useSchool } from "@/components/SchoolProvider";
+import { fetchBrandingByCode, type SchoolBranding } from "@/lib/schoolBranding";
 
 export interface SchoolProfile {
   name: string;
@@ -28,61 +30,30 @@ export function schoolSlug(name: string): string {
   return slug || "school";
 }
 
-const CACHE_KEY = "sf-school-profile-cache";
-
-function readCache(): SchoolProfile | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(CACHE_KEY);
-    return raw ? (JSON.parse(raw) as SchoolProfile) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(profile: SchoolProfile) {
-  try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(profile));
-  } catch {
-    // Storage can be unavailable (private browsing, quota) — caching is a
-    // nice-to-have here, not something worth surfacing an error over.
-  }
-}
-
 /**
- * One row in school_profile drives branding everywhere it appears —
- * sidebar header, login/register pages — instead of each place having
- * its own hardcoded school name. Falls back to a generic label rather
- * than nothing if the row is somehow missing, so a broken fetch never
- * shows blank branding.
- *
- * Initializes from a cached copy (synchronously, before the network
- * request even starts) rather than always starting from the generic
- * fallback — otherwise every page load flashed "CBT Platform" for a
- * moment before the real name arrived, which reads as unpolished no
- * matter how fast the fetch actually is. Only the very first load ever,
- * with nothing cached yet, still has that brief gap.
+ * The current school's name / motto / logo, for headers, login and
+ * set-password screens. It comes from the school-aware context (see
+ * components/SchoolProvider.tsx): the signed-in user's own school, or the
+ * school in the /s/<code> link. For signed-out pages reached by an emailed
+ * link (set / reset password), pass the school code carried in that link.
+ * Falls back to a generic label — never another school's name — if nothing
+ * is known yet.
  */
-export function useSchoolProfile(): SchoolProfile {
-  const [profile, setProfile] = useState<SchoolProfile>(() => readCache() ?? FALLBACK);
+export function useSchoolProfile(code?: string | null): SchoolProfile {
+  const { school } = useSchool();
+  const [byCode, setByCode] = useState<SchoolBranding | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("school_profile")
-      .select("school_name, motto, logo_url")
-      .single()
-      .then(({ data, error }) => {
-        if (error || !data) return;
-        const next: SchoolProfile = {
-          name: data.school_name || FALLBACK.name,
-          motto: data.motto || null,
-          logoUrl: data.logo_url || null,
-        };
-        setProfile(next);
-        writeCache(next);
-      });
-  }, []);
+    if (!code) return;
+    let cancelled = false;
+    fetchBrandingByCode(createClient(), code).then((found) => {
+      if (!cancelled && found && found.status === "active") setByCode(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
-  return profile;
+  const source = byCode ?? school;
+  return source ? { name: source.name || FALLBACK.name, motto: source.motto, logoUrl: source.logoUrl } : FALLBACK;
 }

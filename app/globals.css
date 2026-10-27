@@ -24,11 +24,13 @@
   --color-crimson-800: 105 13 6;
   --color-crimson-900: 72 9 4;
   --color-on-crimson: 255 255 255;
+  /* Secondary (surface) color — the original cream unless a school picks its own. */
+  --color-secondary-rgb: 255 247 211;
 }
 
 html,
 body {
-  background-color: #fff7d3;
+  background-color: rgb(var(--color-secondary-rgb));
   /* Defensive backstop: nothing in this app should ever need horizontal
      scroll on a phone. If something someday overflows anyway, it gets
      clipped instead of dragging the whole page into a scrollable mess.

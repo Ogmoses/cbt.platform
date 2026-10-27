@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchBrandingByCode, fetchOwnSchool, type SchoolBranding } from "@/lib/schoolBranding";
 
@@ -8,7 +9,7 @@ export async function getBrandingByCodeServer(code: string): Promise<SchoolBrand
 }
 
 /** Server-side: the signed-in user's own school (for the portals), or null. Never throws — a failed lookup just means default styling. */
-export async function getCurrentSchoolServer(): Promise<SchoolBranding | null> {
+export const getCurrentSchoolServer = cache(async (): Promise<SchoolBranding | null> => {
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
@@ -17,4 +18,4 @@ export async function getCurrentSchoolServer(): Promise<SchoolBranding | null> {
   } catch {
     return null;
   }
-}
+});

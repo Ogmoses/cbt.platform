@@ -44,9 +44,12 @@ const config: Config = {
         // `text-white`.
         "on-crimson": "rgb(var(--color-on-crimson) / <alpha-value>)",
         cream: {
-          DEFAULT: "#fff7d3",
+          // The school's SECONDARY color (page surface). 100 and DEFAULT follow
+          // each school's chosen color via --color-secondary-rgb (see
+          // lib/schoolBranding.ts); the default is the original cream.
+          DEFAULT: "rgb(var(--color-secondary-rgb) / <alpha-value>)",
           50: "#FFFDF6",
-          100: "#FFF7D3", // brand secondary / surface — fixed, not themed
+          100: "rgb(var(--color-secondary-rgb) / <alpha-value>)",
           200: "#FFF0AD",
         },
         ink: "#1A1A1A",
@@ -59,7 +62,7 @@ const config: Config = {
         primary: "rgb(var(--color-crimson-600) / <alpha-value>)",
         "primary-hover": "rgb(var(--color-crimson-700) / <alpha-value>)",
         "on-primary": "#FFFFFF",
-        background: "#fff7d3",
+        background: "rgb(var(--color-secondary-rgb) / <alpha-value>)",
         "background-muted": "#F8F9FA",
         foreground: "#1A1A1A",
         success: "#1E7B4D",
