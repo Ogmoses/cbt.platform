@@ -244,3 +244,30 @@ export const RECOMMENDED_COLORS: RecommendedColor[] = [
   { key: "slate_gray", name: "Slate Gray", hex: "#475569" },
   { key: "forest_green", name: "Forest Green", hex: "#14532D" },
 ];
+
+/**
+ * The school's SECONDARY color: the page background in light mode. Unlike
+ * the accent, this sits behind all the body text (near-black ink), so the
+ * choices are a curated set of LIGHT tints — every one keeps text easily
+ * readable — rather than an open picker. (Dark mode has its own background
+ * and is unaffected.)
+ */
+export const DEFAULT_SURFACE_COLOR = "#FFF7D3";
+
+export const SURFACE_COLORS: RecommendedColor[] = [
+  { key: "cream", name: "Cream", hex: "#FFF7D3" },
+  { key: "warm_white", name: "Warm White", hex: "#FFFBF0" },
+  { key: "cloud", name: "Cloud", hex: "#F1F3F5" },
+  { key: "mint", name: "Mint", hex: "#E3F4E8" },
+  { key: "sky_mist", name: "Sky Mist", hex: "#E1EEFA" },
+  { key: "lavender", name: "Lavender", hex: "#ECE6F8" },
+  { key: "blush", name: "Blush", hex: "#FBE6E3" },
+  { key: "peach", name: "Peach", hex: "#FFE8D4" },
+  { key: "sand", name: "Sand", hex: "#F0E8D8" },
+];
+
+/** "#fff7d3" -> "255 247 211" — the format the --color-secondary-rgb CSS variable uses. */
+export function surfaceChannels(hex: string): string {
+  const h = hex.replace("#", "");
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(" ");
+}

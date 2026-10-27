@@ -108,6 +108,7 @@ export interface SchoolProfile {
   address?: string;
   logoUrl?: string | null;
   themeColor?: string;
+  secondaryColor?: string;
 }
 
 export interface GradeBand {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Loader2, X, Link2, Check, Pause, Play, BadgeCheck } from "lucide-react";
+import { Plus, Loader2, X, Link2, Check, Pause, Play, BadgeCheck, Trash2 } from "lucide-react";
+import ConfirmTypeModal from "./ConfirmTypeModal";
 import { createClient } from "@/lib/supabase/client";
 
 type Status = "pending" | "active" | "suspended";
@@ -43,6 +44,10 @@ export default function OwnerSchools() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [toDelete, setToDelete] = useState<SchoolStats | null>(null);
+  const [staleCount, setStaleCount] = useState(0);
+  const [showPurge, setShowPurge] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pendingInfo, setPendingInfo] = useState<Record<string, { fullName: string; email: string | null; verified: boolean }>>({});
   const [approved, setApproved] = useState<{ name: string; link: string; emailSent: boolean | null; adminEmail: string | null } | null>(null);
 
@@ -59,6 +64,8 @@ export default function OwnerSchools() {
     try {
       const res = await fetch("/api/owner/schools");
       if (res.ok) setPendingInfo((await res.json()).pending ?? {});
+      const stale = await fetch("/api/owner/schools/purge-stale");
+      if (stale.ok) setStaleCount((await stale.json()).count ?? 0);
     } catch {
       // The list still works without this extra detail.
     }
@@ -90,6 +97,28 @@ export default function OwnerSchools() {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const deleteSchool = async (s: SchoolStats, typed: string) => {
+    const res = await fetch("/api/owner/schools", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: s.school_id, confirmCode: typed }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Couldn't delete the school.");
+    setToDelete(null);
+    setNotice(`${s.name} and all of its data were permanently deleted.${data.filesFailed ? " Some uploaded images couldn't be removed — they're orphaned and harmless." : ""}`);
+    await load();
+  };
+
+  const purgeStale = async () => {
+    const res = await fetch("/api/owner/schools/purge-stale", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Couldn't clear the old sign-ups.");
+    setShowPurge(false);
+    setNotice(`Removed ${data.removed} old unconfirmed sign-up${data.removed === 1 ? "" : "s"}.`);
+    await load();
   };
 
   const copyLink = async (s: SchoolStats) => {
@@ -151,6 +180,21 @@ export default function OwnerSchools() {
           <Plus size={15} /> Add school
         </button>
       </div>
+
+      {notice && (
+        <div className="flex items-start justify-between gap-3 rounded-lg bg-background-muted p-3.5 text-[12.5px] text-ink dark:bg-white/5 dark:text-white">
+          <p>{notice}</p>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss" className="shrink-0 text-ink/40 dark:text-white/40">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {staleCount > 0 && (
+        <button type="button" onClick={() => setShowPurge(true)} className="w-full rounded-lg border border-dashed border-black/15 py-2.5 text-[12.5px] text-ink/60 hover:text-red-600 dark:border-white/20 dark:text-white/60">
+          Clear {staleCount} old sign-up{staleCount === 1 ? "" : "s"} that never confirmed their email…
+        </button>
+      )}
 
       {approved && (
         <div className="space-y-2 rounded-lg bg-success/10 p-3.5 text-[12.5px] text-ink dark:text-white">
@@ -225,6 +269,13 @@ export default function OwnerSchools() {
                   {busyId === s.school_id ? <Loader2 size={13} className="animate-spin" /> : <Pause size={13} />} Suspend
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setToDelete(s)}
+                className="ml-auto flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium text-red-600/80 hover:bg-red-50 hover:text-red-700 dark:text-red-400/80 dark:hover:bg-red-500/10"
+              >
+                <Trash2 size={13} /> Delete
+              </button>
               {s.status === "suspended" && (
                 <button type="button" disabled={busyId === s.school_id} onClick={() => act(s.school_id, "reactivate")} className="flex items-center gap-1.5 rounded-md bg-crimson-600 px-3 py-1.5 text-[12px] font-medium text-on-crimson disabled:opacity-60">
                   {busyId === s.school_id ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Reactivate
@@ -235,6 +286,35 @@ export default function OwnerSchools() {
         ))}
         {sorted.length === 0 && <p className="py-10 text-center text-[13px] text-ink/45 dark:text-white/45">No schools yet.</p>}
       </div>
+
+      {toDelete && (
+        <ConfirmTypeModal
+          title={`Delete ${toDelete.name}?`}
+          confirmWord={toDelete.code}
+          confirmLabel="Delete forever"
+          onConfirm={() => deleteSchool(toDelete, toDelete.code)}
+          onClose={() => setToDelete(null)}
+        >
+          <p>
+            This <strong className="text-red-600">permanently erases</strong> the school and everything in it. It cannot be undone, and there is no way to get it back:
+          </p>
+          <ul className="list-disc space-y-0.5 pl-5">
+            <li>{Number(toDelete.students)} student{Number(toDelete.students) === 1 ? "" : "s"} and {Number(toDelete.teachers)} teacher{Number(toDelete.teachers) === 1 ? "" : "s"}, with their sign-in accounts</li>
+            <li>{Number(toDelete.exams)} exam{Number(toDelete.exams) === 1 ? "" : "s"} and {Number(toDelete.exam_sessions)} exam sitting{Number(toDelete.exam_sessions) === 1 ? "" : "s"}</li>
+            <li>all questions, answers, results, report data, classes, subjects and settings</li>
+            <li>the logo and every uploaded image</li>
+          </ul>
+          <p className="text-[12.5px]">Tip: if you only want to stop access for now, use <strong>Suspend</strong> instead.</p>
+        </ConfirmTypeModal>
+      )}
+
+      {showPurge && (
+        <ConfirmTypeModal title="Clear old sign-ups?" confirmWord="remove" confirmLabel="Remove them" onConfirm={purgeStale} onClose={() => setShowPurge(false)}>
+          <p>
+            This permanently removes <strong>{staleCount}</strong> school request{staleCount === 1 ? "" : "s"} that were made over a week ago and never had their admin's email confirmed. Schools that were approved, or whose email was confirmed, are never touched.
+          </p>
+        </ConfirmTypeModal>
+      )}
 
       {showAdd && (
         <AddSchoolModal

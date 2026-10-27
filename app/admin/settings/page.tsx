@@ -40,6 +40,7 @@ export default function AdminSettingsPage() {
         address: own.address ?? "",
         logoUrl: own.logoUrl,
         themeColor: own.themeColor || DEFAULT_THEME_COLOR,
+        secondaryColor: own.secondaryColor,
       });
     }
     setScale((scaleRows ?? []).map((r) => ({ id: r.id, minScore: r.min_score, maxScore: r.max_score, gradeLetter: r.grade_letter, remark: r.remark ?? "" })));
@@ -69,6 +70,10 @@ export default function AdminSettingsPage() {
     await updateSchool({ theme_color: themeColor });
   };
 
+  const handleSaveSurface = async (secondaryColor: string) => {
+    await updateSchool({ secondary_color: secondaryColor });
+  };
+
   const handleSaveGradingScale = async (bands: GradeBand[]) => {
     // Small table, rewritten wholesale each save — simpler and safer than
     // diffing client-generated temp ids against real DB rows.
@@ -82,7 +87,8 @@ export default function AdminSettingsPage() {
   return (
     <DashboardLayout role="super_admin" pageTitle="Settings" userName={authUser?.fullName ?? ""} onLogout={() => signOutAndRedirect(router)}>
       {loading ? <PageLoading /> : (
-        <SettingsManager profile={profile} gradingScale={scale} onSaveProfile={handleSaveProfile} onSaveGradingScale={handleSaveGradingScale} onSaveTheme={handleSaveTheme} />
+        <SettingsManager profile={profile} gradingScale={scale} onSaveProfile={handleSaveProfile} onSaveGradingScale={handleSaveGradingScale} onSaveTheme={handleSaveTheme}
+        onSaveSurface={handleSaveSurface} />
       )}
     </DashboardLayout>
   );

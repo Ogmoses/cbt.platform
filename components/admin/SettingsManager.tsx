@@ -6,11 +6,11 @@
  * score into a grade letter across the platform.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Loader2, ImagePlus, X, Save, Check } from "lucide-react";
 import type { GradeBand, SchoolProfile } from "./types";
 import { uploadImage } from "@/lib/uploadImage";
-import { RECOMMENDED_COLORS, DEFAULT_THEME_COLOR, themeCssVars, buildRampFromHex, getOnAccentColor } from "@/lib/themes";
+import { RECOMMENDED_COLORS, DEFAULT_THEME_COLOR, themeCssVars, buildRampFromHex, getOnAccentColor, SURFACE_COLORS, DEFAULT_SURFACE_COLOR, surfaceChannels } from "@/lib/themes";
 
 interface SettingsManagerProps {
   profile: SchoolProfile;
@@ -18,9 +18,10 @@ interface SettingsManagerProps {
   onSaveProfile: (profile: SchoolProfile) => Promise<void>;
   onSaveGradingScale: (bands: GradeBand[]) => Promise<void>;
   onSaveTheme: (themeColor: string) => Promise<void>;
+  onSaveSurface: (secondaryColor: string) => Promise<void>;
 }
 
-export default function SettingsManager({ profile, gradingScale, onSaveProfile, onSaveGradingScale, onSaveTheme }: SettingsManagerProps) {
+export default function SettingsManager({ profile, gradingScale, onSaveProfile, onSaveGradingScale, onSaveTheme, onSaveSurface }: SettingsManagerProps) {
   return (
     <div className="max-w-2xl space-y-6 pb-10 lg:max-w-4xl">
       <div>
@@ -29,8 +30,78 @@ export default function SettingsManager({ profile, gradingScale, onSaveProfile, 
       </div>
       <ProfileSection profile={profile} onSave={onSaveProfile} />
       <ThemeSection currentColor={profile.themeColor} onSave={onSaveTheme} />
+      <SurfaceSection currentColor={profile.secondaryColor} onSave={onSaveSurface} />
       <GradingScaleSection bands={gradingScale} onSave={onSaveGradingScale} />
     </div>
+  );
+}
+
+function previewSurface(hex: string) {
+  document.documentElement.style.setProperty("--color-secondary-rgb", surfaceChannels(hex));
+}
+
+/** Background color for the whole site in light mode — a curated set of light tints so text always stays readable. */
+function SurfaceSection({ currentColor, onSave }: { currentColor?: string; onSave: (color: string) => Promise<void> }) {
+  const start = currentColor || DEFAULT_SURFACE_COLOR;
+  const [selected, setSelected] = useState(start);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const savedColor = useRef(start);
+
+  // Leaving the screen without saving puts the real background back.
+  useEffect(() => {
+    return () => previewSurface(savedColor.current);
+  }, []);
+
+  const choose = (hex: string) => {
+    setSelected(hex);
+    setSaved(false);
+    previewSurface(hex); // live preview
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(selected);
+      savedColor.current = selected;
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the background color.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SectionCard title="Background color" subtitle="The page background in light mode, for everyone at your school. Tap one to preview it on this page, then save.">
+      <div className="grid grid-cols-4 gap-3 sm:grid-cols-6">
+        {SURFACE_COLORS.map((c) => {
+          const isSelected = selected.toUpperCase() === c.hex.toUpperCase();
+          return (
+            <button key={c.key} type="button" onClick={() => choose(c.hex)} className="flex flex-col items-center gap-1.5" title={c.name}>
+              <div className={`relative flex h-11 w-11 items-center justify-center rounded-full border-2 transition-colors ${isSelected ? "border-crimson-600" : "border-transparent"}`}>
+                <div className="h-9 w-9 rounded-full ring-1 ring-inset ring-black/15 dark:ring-white/20" style={{ backgroundColor: c.hex }} />
+                {isSelected && (
+                  <div className="absolute -right-0.5 -top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-crimson-600 text-on-crimson ring-2 ring-white dark:ring-[#1A1C20]">
+                    <Check size={10} strokeWidth={3.5} />
+                  </div>
+                )}
+              </div>
+              <span className="max-w-[64px] truncate text-[10.5px] font-medium text-ink/60 dark:text-white/60">{c.name}</span>
+            </button>
+          );
+        })}
+      </div>
+      {error && <p className="mt-3 text-[12.5px] text-crimson-600">{error}</p>}
+      <div className="mt-5 flex items-center justify-end gap-3 border-t border-black/5 pt-4 dark:border-white/10">
+        {saved && <span className="text-[12.5px] text-success">Saved</span>}
+        <button type="button" onClick={handleSave} disabled={saving} className="rounded-lg bg-crimson-600 px-4 py-2 text-[13px] font-medium text-on-crimson hover:bg-crimson-700 disabled:opacity-60">
+          {saving ? "Saving…" : "Save background"}
+        </button>
+      </div>
+    </SectionCard>
   );
 }
 

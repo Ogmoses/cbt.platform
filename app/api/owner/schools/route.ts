@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/owner/requireOwner";
+import { deleteSchoolCompletely } from "@/lib/owner/deleteSchool";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAccessToken } from "@/lib/accessTokens";
 import { sendMail } from "@/lib/mailer";
@@ -23,16 +24,6 @@ import { inviteEmailHtml, schoolApprovedEmailHtml } from "@/lib/emailTemplates";
 
 const CODE_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-async function requireOwner() {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { ok: false as const, status: 401, error: "Not signed in." };
-  const admin = createAdminClient();
-  const { data: row } = await admin.from("users").select("role").eq("id", auth.user.id).maybeSingle();
-  if (row?.role !== "platform_owner") return { ok: false as const, status: 403, error: "Only the platform owner can do this." };
-  return { ok: true as const, userId: auth.user.id };
-}
 
 function validCode(code: unknown): code is string {
   return typeof code === "string" && CODE_RE.test(code) && code.length >= 3 && code.length <= 40;
@@ -230,4 +221,37 @@ export async function PATCH(req: NextRequest) {
   }
 
   return NextResponse.json({ school: updated, link, emailSent, emailError, adminEmail: approvingAdmin?.email ?? null });
+}
+
+/**
+ * DELETE — { id, confirmCode }: permanently erases a whole school and all of
+ * its data. IRREVERSIBLE. The caller must type the school's own code (checked
+ * again here and once more inside the database function), and it refuses while
+ * an exam is in progress at that school — suspend it and wait, or let it finish.
+ */
+export async function DELETE(req: NextRequest) {
+  const guard = await requireOwner();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+
+  const { id, confirmCode } = await req.json().catch(() => ({}));
+  if (!id || typeof confirmCode !== "string") return NextResponse.json({ error: "id and confirmCode are required." }, { status: 400 });
+
+  const admin = createAdminClient();
+  const { data: school } = await admin.from("schools").select("id, code").eq("id", id).maybeSingle();
+  if (!school) return NextResponse.json({ error: "School not found." }, { status: 404 });
+  if (confirmCode.trim().toLowerCase() !== school.code) {
+    return NextResponse.json({ error: "The code you typed doesn't match this school." }, { status: 400 });
+  }
+
+  const { count: live } = await admin.from("student_exam_sessions").select("id", { count: "exact", head: true }).eq("school_id", id).eq("status", "active");
+  if ((live ?? 0) > 0) {
+    return NextResponse.json({ error: "An exam is in progress at this school right now. Wait until it finishes, then try again." }, { status: 409 });
+  }
+
+  try {
+    const result = await deleteSchoolCompletely(admin, id, school.code);
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    return NextResponse.json({ error: `Couldn't delete the school. Nothing was changed. (${err instanceof Error ? err.message : "error"})` }, { status: 500 });
+  }
 }
