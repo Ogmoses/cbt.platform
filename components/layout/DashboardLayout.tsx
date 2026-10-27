@@ -33,6 +33,7 @@ export default function DashboardLayout({
       <div className="flex min-h-screen flex-1 flex-col">
         <ConnectionBanner />
         <Navbar
+          role={role}
           title={pageTitle}
           userName={userName}
           userPhotoUrl={userPhotoUrl}

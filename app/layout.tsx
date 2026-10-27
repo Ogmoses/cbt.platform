@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
-import { getCurrentSchoolServer } from "@/lib/schoolServer";
+import { getCurrentSchoolServer, getPlatformThemeServer } from "@/lib/schoolServer";
 import { brandingStyleText } from "@/lib/schoolBranding";
 import { SchoolProvider } from "@/components/SchoolProvider";
 import { colorSchemeBootstrapScript } from "@/lib/colorScheme";
@@ -42,6 +42,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // app/s/[schoolCode]/layout.tsx). If the lookup fails, the defaults baked
   // into globals.css apply — never a broken or blank style.
   const school = await getCurrentSchoolServer();
+  // No school = signed out, or the platform owner (who has their own colors).
+  const platformTheme = school ? null : await getPlatformThemeServer();
 
   return (
     <html lang="en" className={`${inter.variable} ${plusJakarta.variable}`}>
@@ -50,7 +52,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             very first paint — without this, the page would flash light
             mode for a moment even for someone who's chosen dark. */}
         <script dangerouslySetInnerHTML={{ __html: colorSchemeBootstrapScript() }} />
-        {school && <style dangerouslySetInnerHTML={{ __html: brandingStyleText(school) }} />}
+        {(school ?? platformTheme) && <style dangerouslySetInnerHTML={{ __html: brandingStyleText((school ?? platformTheme)!) }} />}
       </head>
       <body className="font-sans antialiased">
         <ColorSchemeSync />

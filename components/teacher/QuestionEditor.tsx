@@ -13,6 +13,7 @@ import { Plus, Trash2, ImagePlus, X, Loader2, Check } from "lucide-react";
 import MathText from "@/components/common/MathText";
 import { splitMathSegments } from "@/lib/mathDetect";
 import { uploadImage } from "@/lib/uploadImage";
+import ImageCropModal from "@/components/ui/ImageCropModal";
 
 /** Whether any part of the text actually contains a detected formula — used to decide whether a live preview is worth showing at all. */
 function hasMath(text: string): boolean {
@@ -61,6 +62,7 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
@@ -294,11 +296,28 @@ export default function QuestionEditor({ initial, subjects, classes, defaultSubj
                   disabled={uploadingImage}
                   className="hidden"
                   onChange={(e) => {
-                    handleImageChange(e.target.files?.[0] ?? null);
+                    const picked = e.target.files?.[0];
+                    // Animated GIFs go up untouched (the editor would flatten them); everything else opens the editor first.
+                    if (picked) {
+                      if (picked.type === "image/gif") handleImageChange(picked);
+                      else setCropFile(picked);
+                    }
                     e.target.value = ""; // allows re-picking the same file after an error
                   }}
                 />
               </label>
+            )}
+            {cropFile && (
+              <ImageCropModal
+                file={cropFile}
+                shape="rect"
+                title="Edit diagram"
+                onCancel={() => setCropFile(null)}
+                onDone={(edited) => {
+                  setCropFile(null);
+                  handleImageChange(edited);
+                }}
+              />
             )}
             {imageError && <p className="mt-1.5 text-[12px] text-crimson-600">{imageError}</p>}
           </div>

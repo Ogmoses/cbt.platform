@@ -29,7 +29,10 @@ interface NavItem {
 }
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
-  platform_owner: [{ label: "Schools", href: "/owner", icon: Building2 }],
+  platform_owner: [
+    { label: "Schools", href: "/owner", icon: Building2 },
+    { label: "Settings", href: "/owner/settings", icon: Settings },
+  ],
   super_admin: [
     { label: "Overview", href: "/admin", icon: LayoutDashboard },
     { label: "Students & Teachers", href: "/admin/people", icon: Users },

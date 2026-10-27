@@ -1,29 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { Menu, Bell, ChevronDown, LogOut, User as UserIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Menu, Bell, ChevronDown, ChevronRight, LogOut, Loader2, User as UserIcon } from "lucide-react";
+import { useActionItems } from "@/lib/useActionItems";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface NavbarProps {
+  role: "platform_owner" | "super_admin" | "teacher" | "student";
   title: string;
   userName: string;
   userPhotoUrl?: string | null;
-  notificationCount?: number;
   onMenuClick: () => void;
   onViewProfile: () => void;
   onLogout: () => void;
 }
 
 export default function Navbar({
+  role,
   title,
   userName,
   userPhotoUrl,
-  notificationCount = 0,
   onMenuClick,
   onViewProfile,
   onLogout,
 }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const router = useRouter();
+  const { items, loading, refresh, total } = useActionItems(role);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-black/5 bg-white/90 px-4 backdrop-blur dark:border-white/10 dark:bg-[#16181C]/90 sm:px-6">
@@ -39,19 +44,68 @@ export default function Navbar({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        <button
-          aria-label="Notifications"
-          className="relative rounded-md p-2 text-ink/60 transition-colors duration-200 hover:bg-background-muted dark:text-white/60 dark:hover:bg-white/5"
-        >
-          <Bell size={19} />
-          {notificationCount > 0 && (
-            <span className="absolute right-1.5 top-1.5 flex h-2 w-2 rounded-full bg-crimson-600" />
-          )}
-        </button>
+        <div className="relative">
+          <button
+            aria-label={total > 0 ? `Notifications: ${total} need attention` : "Notifications"}
+            onClick={() => {
+              setBellOpen((v) => !v);
+              setMenuOpen(false);
+              if (!bellOpen) refresh();
+            }}
+            className="relative rounded-md p-2 text-ink/60 transition-colors duration-200 hover:bg-background-muted dark:text-white/60 dark:hover:bg-white/5"
+          >
+            <Bell size={19} />
+            {total > 0 && <span className="absolute right-1.5 top-1.5 flex h-2 w-2 rounded-full bg-crimson-600" />}
+          </button>
+
+          <AnimatePresence>
+            {bellOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setBellOpen(false)} />
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="fixed right-3 top-[68px] z-40 w-[calc(100vw-1.5rem)] max-w-sm overflow-hidden rounded-lg bg-white shadow-card-hover dark:bg-[#1A1C20] sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-80"
+                >
+                  <p className="border-b border-black/5 px-4 py-3 font-display text-[13.5px] font-semibold text-ink dark:border-white/10 dark:text-white">Needs your attention</p>
+                  {loading ? (
+                    <div className="flex justify-center py-6 text-ink/40 dark:text-white/40">
+                      <Loader2 size={18} className="animate-spin" />
+                    </div>
+                  ) : items.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-[13px] text-ink/50 dark:text-white/50">You're all caught up.</p>
+                  ) : (
+                    <ul>
+                      {items.map((item) => (
+                        <li key={item.key}>
+                          <button
+                            onClick={() => {
+                              setBellOpen(false);
+                              router.push(item.href);
+                            }}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-[13px] text-ink transition-colors hover:bg-background-muted dark:text-white dark:hover:bg-white/5"
+                          >
+                            <span>{item.label}</span>
+                            <ChevronRight size={15} className="shrink-0 text-ink/30 dark:text-white/30" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
 
         <div className="relative">
           <button
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => {
+              setMenuOpen((v) => !v);
+              setBellOpen(false);
+            }}
             className="flex items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-2 transition-colors duration-200 hover:bg-background-muted dark:hover:bg-white/5"
           >
             <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-crimson-100 text-crimson-700">

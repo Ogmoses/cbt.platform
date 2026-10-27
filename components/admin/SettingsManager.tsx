@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Loader2, ImagePlus, X, Save, Check } from "lucide-react";
 import type { GradeBand, SchoolProfile } from "./types";
 import { uploadImage } from "@/lib/uploadImage";
+import ImageCropModal from "@/components/ui/ImageCropModal";
 import { RECOMMENDED_COLORS, DEFAULT_THEME_COLOR, themeCssVars, buildRampFromHex, getOnAccentColor, SURFACE_COLORS, DEFAULT_SURFACE_COLOR, surfaceChannels } from "@/lib/themes";
 
 interface SettingsManagerProps {
@@ -41,7 +42,7 @@ function previewSurface(hex: string) {
 }
 
 /** Background color for the whole site in light mode — a curated set of light tints so text always stays readable. */
-function SurfaceSection({ currentColor, onSave }: { currentColor?: string; onSave: (color: string) => Promise<void> }) {
+export function SurfaceSection({ currentColor, onSave }: { currentColor?: string; onSave: (color: string) => Promise<void> }) {
   const start = currentColor || DEFAULT_SURFACE_COLOR;
   const [selected, setSelected] = useState(start);
   const [saving, setSaving] = useState(false);
@@ -117,7 +118,7 @@ function applyPreview(color: string) {
   styleTag.textContent = `:root { ${themeCssVars(color)} }`;
 }
 
-function ThemeSection({ currentColor, onSave }: { currentColor?: string; onSave: (color: string) => Promise<void> }) {
+export function ThemeSection({ currentColor, onSave }: { currentColor?: string; onSave: (color: string) => Promise<void> }) {
   const [selected, setSelected] = useState(currentColor || DEFAULT_THEME_COLOR);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -209,6 +210,7 @@ function ProfileSection({ profile, onSave }: { profile: SchoolProfile; onSave: (
   const [motto, setMotto] = useState(profile.motto ?? "");
   const [address, setAddress] = useState(profile.address ?? "");
   const [logoUrl, setLogoUrl] = useState<string | null>(profile.logoUrl ?? null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -246,7 +248,7 @@ function ProfileSection({ profile, onSave }: { profile: SchoolProfile; onSave: (
         {logoUrl ? (
           <div className="relative">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logoUrl} alt="School logo" className="h-16 w-16 rounded-lg border border-black/10 dark:border-white/15 object-contain" />
+            <img src={logoUrl} alt="School logo" className="h-16 w-16 rounded-full border border-black/10 dark:border-white/15 object-cover" />
             <button onClick={() => setLogoUrl(null)} className="absolute -right-2 -top-2 rounded-full bg-white dark:bg-[#1A1C20] p-1 text-ink/60 dark:text-white/60 shadow-card hover:text-crimson-700 dark:hover:text-crimson-500">
               <X size={12} />
             </button>
@@ -257,11 +259,12 @@ function ProfileSection({ profile, onSave }: { profile: SchoolProfile; onSave: (
             <span className="text-[9px] font-medium">{uploadingLogo ? "Uploading" : "Logo"}</span>
             <input
               type="file"
-              accept="image/png,image/jpeg"
+              accept="image/png,image/jpeg,image/webp"
               disabled={uploadingLogo}
               className="hidden"
               onChange={(e) => {
-                handleLogo(e.target.files?.[0] ?? null);
+                const picked = e.target.files?.[0];
+                if (picked) setCropFile(picked); // opens the round crop editor first
                 e.target.value = "";
               }}
             />
@@ -272,6 +275,18 @@ function ProfileSection({ profile, onSave }: { profile: SchoolProfile; onSave: (
           <TextField label="Motto (optional)" value={motto} onChange={setMotto} placeholder="e.g. Knowledge, Character, Excellence" />
         </div>
       </div>
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          shape="circle"
+          title="Crop your logo"
+          onCancel={() => setCropFile(null)}
+          onDone={(cropped) => {
+            setCropFile(null);
+            handleLogo(cropped);
+          }}
+        />
+      )}
       {logoError && <p className="mt-2 text-[12px] text-crimson-600">{logoError}</p>}
       <label className="mt-3.5 block">
         <span className="mb-1 block text-[12px] font-medium text-ink/60 dark:text-white/60">Address</span>
