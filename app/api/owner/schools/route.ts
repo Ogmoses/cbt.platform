@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { issueAccessToken } from "@/lib/accessTokens";
 import { sendMail } from "@/lib/mailer";
-import { inviteEmailHtml } from "@/lib/emailTemplates";
+import { inviteEmailHtml, schoolApprovedEmailHtml } from "@/lib/emailTemplates";
 
 /**
  * Platform-owner console actions. Only the platform owner may call this; it
@@ -138,6 +138,36 @@ export async function POST(req: NextRequest) {
   });
 }
 
+/** The admin behind a pending school: who they are and whether they confirmed their email. */
+async function pendingAdminInfo(admin: ReturnType<typeof createAdminClient>, schoolId: string) {
+  const { data: adminRow } = await admin
+    .from("users")
+    .select("id, full_name, email")
+    .eq("school_id", schoolId)
+    .eq("role", "super_admin")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!adminRow) return null;
+  const { data: authUser } = await admin.auth.admin.getUserById(adminRow.id);
+  return { id: adminRow.id, fullName: adminRow.full_name as string, email: adminRow.email as string | null, verified: Boolean(authUser.user?.email_confirmed_at) };
+}
+
+/** GET — who is behind each pending school, and have they confirmed their email? (Owner console uses this.) */
+export async function GET() {
+  const guard = await requireOwner();
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+
+  const admin = createAdminClient();
+  const { data: pending } = await admin.from("schools").select("id").eq("status", "pending");
+  const result: Record<string, { fullName: string; email: string | null; verified: boolean }> = {};
+  for (const s of pending ?? []) {
+    const info = await pendingAdminInfo(admin, s.id);
+    if (info) result[s.id] = { fullName: info.fullName, email: info.email, verified: info.verified };
+  }
+  return NextResponse.json({ pending: result });
+}
+
 export async function PATCH(req: NextRequest) {
   const guard = await requireOwner();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -148,12 +178,18 @@ export async function PATCH(req: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const { data: school } = await admin.from("schools").select("id, status, code").eq("id", id).maybeSingle();
+  const { data: school } = await admin.from("schools").select("id, name, status, code").eq("id", id).maybeSingle();
   if (!school) return NextResponse.json({ error: "School not found." }, { status: 404 });
+
+  let approvingAdmin: Awaited<ReturnType<typeof pendingAdminInfo>> = null;
 
   let patch: Record<string, unknown>;
   if (action === "approve") {
     if (school.status !== "pending") return NextResponse.json({ error: "Only a pending school can be approved." }, { status: 409 });
+    // Never approve a school whose admin hasn't proven they own the email address.
+    approvingAdmin = await pendingAdminInfo(admin, id);
+    if (!approvingAdmin) return NextResponse.json({ error: "This school has no admin account." }, { status: 409 });
+    if (!approvingAdmin.verified) return NextResponse.json({ error: "The admin hasn't confirmed their email yet, so this school can't be approved." }, { status: 409 });
     patch = { status: "active", approved_at: new Date().toISOString() };
     // The code can still be corrected while pending (it's locked after approval).
     if (typeof code === "string" && code.trim() && code.trim().toLowerCase() !== school.code) {
@@ -174,5 +210,24 @@ export async function PATCH(req: NextRequest) {
   const { data: updated, error } = await admin.from("schools").update(patch).eq("id", id).select("id, status, code").single();
   if (error || !updated) return NextResponse.json({ error: error?.message ?? "Couldn't update the school." }, { status: 500 });
 
-  return NextResponse.json({ school: updated });
+  // Approval: tell the admin their school is live, with their own link.
+  // Best effort — the owner is also handed the link to send by hand.
+  let emailSent: boolean | null = null;
+  let emailError: string | null = null;
+  const link = `${req.nextUrl.origin}/s/${updated.code}`;
+  if (action === "approve" && approvingAdmin?.email) {
+    try {
+      await sendMail({
+        to: approvingAdmin.email,
+        subject: `${school.name} is approved`,
+        html: schoolApprovedEmailHtml({ schoolName: school.name, fullName: approvingAdmin.fullName, link }),
+      });
+      emailSent = true;
+    } catch (err) {
+      emailSent = false;
+      emailError = err instanceof Error ? err.message : "mail error";
+    }
+  }
+
+  return NextResponse.json({ school: updated, link, emailSent, emailError, adminEmail: approvingAdmin?.email ?? null });
 }

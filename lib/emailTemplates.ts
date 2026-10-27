@@ -76,3 +76,37 @@ export function resetEmailHtml(opts: { schoolName: string; fullName: string; lin
   `;
   return shell(opts.schoolName, body);
 }
+
+export function verifySchoolEmailHtml(opts: { schoolName: string; fullName: string; link: string; expiresInHours: number }): string {
+  const body = `
+    <h1 style="margin:0 0 12px;color:#1A1A1A;font-size:17px;font-weight:600;">Confirm your email</h1>
+    <p style="margin:0 0 6px;color:#1A1A1A;font-size:13.5px;line-height:1.6;">Hi ${escapeHtml(opts.fullName)},</p>
+    <p style="margin:0 0 6px;color:#1A1A1A;font-size:13.5px;line-height:1.6;">Thanks for registering ${escapeHtml(opts.schoolName)}. Confirm this email address to finish your request:</p>
+    ${button("Confirm my email", opts.link)}
+    <p style="margin:16px 0 0;color:#1A1A1A80;font-size:12px;line-height:1.6;">After you confirm, your school waits for approval. We'll email you your school's link as soon as it's approved. This link expires in ${opts.expiresInHours} hours.</p>
+    <p style="margin:8px 0 0;color:#1A1A1A80;font-size:11px;line-height:1.6;word-break:break-all;">Or paste this into your browser: ${opts.link}</p>
+  `;
+  return shell(opts.schoolName, body);
+}
+
+export function schoolApprovedEmailHtml(opts: { schoolName: string; fullName: string; link: string }): string {
+  const body = `
+    <h1 style="margin:0 0 12px;color:#1A1A1A;font-size:17px;font-weight:600;">${escapeHtml(opts.schoolName)} is approved</h1>
+    <p style="margin:0 0 6px;color:#1A1A1A;font-size:13.5px;line-height:1.6;">Hi ${escapeHtml(opts.fullName)},</p>
+    <p style="margin:0 0 6px;color:#1A1A1A;font-size:13.5px;line-height:1.6;">Your school is ready. This is its own link — bookmark it and share it with your teachers and students:</p>
+    ${button("Open your school", opts.link)}
+    <p style="margin:16px 0 0;color:#1A1A1A80;font-size:12px;line-height:1.6;">Sign in with the email and password you registered with (the Teacher / Admin tab), then add your classes, subjects, teachers and students.</p>
+    <p style="margin:8px 0 0;color:#1A1A1A80;font-size:11px;line-height:1.6;word-break:break-all;">Your link: ${opts.link}</p>
+  `;
+  return shell(opts.schoolName, body);
+}
+
+export function ownerNewSignupEmailHtml(opts: { schoolName: string; adminName: string; adminEmail: string; link: string }): string {
+  const body = `
+    <h1 style="margin:0 0 12px;color:#1A1A1A;font-size:17px;font-weight:600;">A school is waiting for approval</h1>
+    <p style="margin:0 0 6px;color:#1A1A1A;font-size:13.5px;line-height:1.6;"><strong>${escapeHtml(opts.schoolName)}</strong> has registered and confirmed its admin's email.</p>
+    <p style="margin:0 0 6px;color:#1A1A1A;font-size:13.5px;line-height:1.6;">Admin: ${escapeHtml(opts.adminName)} (${escapeHtml(opts.adminEmail)})</p>
+    ${button("Review in the console", opts.link)}
+  `;
+  return shell("Platform console", body);
+}

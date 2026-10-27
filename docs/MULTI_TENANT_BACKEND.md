@@ -100,3 +100,14 @@ deliberately leaves in place — so the app is fully working for your one school
 
 Edit the server routes listed above, the owner console, the `/s/<code>` login/register pages, the self-signup
 flow with email verification, and swap the hardcoded school names for `useSchool()`.
+
+## School self-signup (built)
+
+`/register-school` (public) -> `POST /api/schools/register` creates the school as PENDING, its first admin with
+sign-in BANNED until they confirm their email, and emails a confirmation link (`/verify-school?token=…`, token
+type `verify`, consumed only on the button press, like invite/reset). `POST /api/schools/verify` lifts the ban and
+emails the platform owner. The owner console shows pending schools with "email confirmed / not confirmed"; approval
+is refused until the email is confirmed, then emails the admin their `/s/<code>` link (and hands the owner the link
+to send by hand if the email fails). Pending/suspended schools are blocked at sign-in and, independently, by the
+database (`active_school_id()`). `POST /api/schools/resend-verification` answers identically for any address.
+Migrations: `013` (old school_profile dropped), `015` (`verify` token type) — both applied.

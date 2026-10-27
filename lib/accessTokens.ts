@@ -17,11 +17,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * load. Opening the link (by a person or a scanner) does nothing.
  */
 
-export type AccessTokenPurpose = "invite" | "reset";
+export type AccessTokenPurpose = "invite" | "reset" | "verify";
 
 const TTL_HOURS: Record<AccessTokenPurpose, number> = {
   invite: 168, // 7 days — teachers don't always act on this the same day
   reset: 2, // shorter-lived: this is an active "I need in right now" case
+  verify: 48, // confirming a new school admin's email address (self-signup)
 };
 
 function hashToken(rawToken: string): string {

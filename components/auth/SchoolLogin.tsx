@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { deriveStudentPassword } from "@/lib/studentCredential";
 import { roleHome } from "@/lib/roleHome";
 import { useSchool } from "@/components/SchoolProvider";
+import { fetchOwnSchool } from "@/lib/schoolBranding";
 
 /**
  * The sign-in screen, used by both /login (the original address, which keeps
@@ -37,6 +38,15 @@ export default function SchoolLogin({ schoolCode }: { schoolCode?: string }) {
     }
   }, [schoolCode, router]);
 
+  /** A pending or suspended school can't be used — sign straight back out with a clear reason. (The platform owner has no school and passes.) */
+  const assertSchoolActive = async () => {
+    const own = await fetchOwnSchool(supabase);
+    if (own && own.status !== "active") {
+      await supabase.auth.signOut();
+      throw new Error(own.status === "pending" ? "Your school is still waiting for approval. We'll email you when it's ready." : "This school's access is currently paused. Please contact your administrator.");
+    }
+  };
+
   const handleStudentLogin = async (fullName: string, studentId: string) => {
     // Student IDs aren't emails, and Supabase Auth signs in by email —
     // resolve it server-side first (there's no session yet to query with).
@@ -51,6 +61,7 @@ export default function SchoolLogin({ schoolCode }: { schoolCode?: string }) {
     const password = deriveStudentPassword(fullName, studentId);
     const { error } = await supabase.auth.signInWithPassword({ email: data.email, password });
     if (error) throw new Error("Your name and student ID didn't match what's on file. Double-check both and try again.");
+    await assertSchoolActive();
     router.push("/student");
   };
 
@@ -58,6 +69,7 @@ export default function SchoolLogin({ schoolCode }: { schoolCode?: string }) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error("Incorrect email or password.");
 
+    await assertSchoolActive();
     const { data: auth } = await supabase.auth.getUser();
     const { data: profile } = await supabase.from("users").select("role").eq("id", auth.user!.id).single();
     router.push(roleHome(profile?.role));
@@ -68,6 +80,7 @@ export default function SchoolLogin({ schoolCode }: { schoolCode?: string }) {
       onStudentLogin={handleStudentLogin}
       onStaffLogin={handleStaffLogin}
       school={schoolCode && school ? { name: school.name, motto: school.motto, logoUrl: school.logoUrl } : undefined}
+      showRegisterSchool={!schoolCode}
     />
   );
 }

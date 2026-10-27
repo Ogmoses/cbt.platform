@@ -43,6 +43,8 @@ export default function OwnerSchools() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [pendingInfo, setPendingInfo] = useState<Record<string, { fullName: string; email: string | null; verified: boolean }>>({});
+  const [approved, setApproved] = useState<{ name: string; link: string; emailSent: boolean | null; adminEmail: string | null } | null>(null);
 
   const load = useCallback(async () => {
     // Returns rows only for the platform owner (enforced in the database).
@@ -53,6 +55,13 @@ export default function OwnerSchools() {
     }
     setError(null);
     setSchools((data ?? []) as SchoolStats[]);
+    // Who is behind each pending school, and have they confirmed their email?
+    try {
+      const res = await fetch("/api/owner/schools");
+      if (res.ok) setPendingInfo((await res.json()).pending ?? {});
+    } catch {
+      // The list still works without this extra detail.
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -71,6 +80,10 @@ export default function OwnerSchools() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't update the school.");
+      if (action === "approve") {
+        const name = schools?.find((s) => s.school_id === id)?.name ?? "The school";
+        setApproved({ name, link: data.link, emailSent: data.emailSent, adminEmail: data.adminEmail });
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't update the school.");
@@ -139,6 +152,24 @@ export default function OwnerSchools() {
         </button>
       </div>
 
+      {approved && (
+        <div className="space-y-2 rounded-lg bg-success/10 p-3.5 text-[12.5px] text-ink dark:text-white">
+          <p>
+            <strong>{approved.name}</strong> is approved.{" "}
+            {approved.emailSent ? `An email with its link went to ${approved.adminEmail}.` : "The email with its link couldn't be sent, so send them this link yourself:"}
+          </p>
+          <p className="break-all rounded bg-white px-2.5 py-2 font-mono text-[11.5px] dark:bg-black/30">{approved.link}</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => navigator.clipboard?.writeText(approved.link)} className="rounded-md bg-white px-3 py-1.5 text-[12px] font-medium dark:bg-black/30">
+              Copy link
+            </button>
+            <button type="button" onClick={() => setApproved(null)} className="rounded-md px-3 py-1.5 text-[12px] text-ink/60 dark:text-white/60">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && <p className="rounded-md bg-crimson-50 px-3 py-2 text-[12.5px] text-crimson-700 dark:bg-crimson-600/15 dark:text-crimson-500">{error}</p>}
 
       <div className="space-y-3">
@@ -151,6 +182,15 @@ export default function OwnerSchools() {
               </div>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium capitalize ${STATUS_STYLE[s.status]}`}>{s.status}</span>
             </div>
+
+            {s.status === "pending" && pendingInfo[s.school_id] && (
+              <p className="mt-2 text-[12px] text-ink/60 dark:text-white/60">
+                Admin: {pendingInfo[s.school_id].fullName} · {pendingInfo[s.school_id].email}{" "}
+                <span className={pendingInfo[s.school_id].verified ? "font-medium text-success" : "font-medium text-amber-700 dark:text-amber-400"}>
+                  {pendingInfo[s.school_id].verified ? "✓ email confirmed" : "⚠ email not confirmed yet"}
+                </span>
+              </p>
+            )}
 
             <div className="mt-3 grid grid-cols-4 gap-2 text-center">
               {[
@@ -176,7 +216,7 @@ export default function OwnerSchools() {
                 {copiedId === s.school_id ? "Copied" : "Copy link"}
               </button>
               {s.status === "pending" && (
-                <button type="button" disabled={busyId === s.school_id} onClick={() => act(s.school_id, "approve")} className="flex items-center gap-1.5 rounded-md bg-crimson-600 px-3 py-1.5 text-[12px] font-medium text-on-crimson disabled:opacity-60">
+                <button type="button" disabled={busyId === s.school_id || pendingInfo[s.school_id]?.verified === false} onClick={() => act(s.school_id, "approve")} className="flex items-center gap-1.5 rounded-md bg-crimson-600 px-3 py-1.5 text-[12px] font-medium text-on-crimson disabled:opacity-60">
                   {busyId === s.school_id ? <Loader2 size={13} className="animate-spin" /> : <BadgeCheck size={13} />} Approve
                 </button>
               )}
